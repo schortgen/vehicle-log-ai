@@ -58,21 +58,132 @@ fun ReviewDetailScreen(
 ) {
     val context = LocalContext.current
 
-    // ... existing code ...
-
-    // Example AsyncImage replacement — wherever AsyncImage was used, we now build an ImageRequest
-    val sampleUri = "content://media/external/images/media/12345"
-    AsyncImage(
-        model = ImageRequest.Builder(context)
-            .data(Uri.parse(sampleUri))
-            .listener(onError = { request, throwable ->
-                DiagnosticLogger.e("ImageLoad", "Failed to load photo: $sampleUri", throwable)
-            })
-            .build(),
-        contentDescription = "Sample photo",
-        contentScale = ContentScale.Crop,
-        modifier = Modifier
-            .size(200.dp)
-            .clip(MaterialTheme.shapes.medium)
+// Example placeholder images. Replace with actual URIs from your ViewModel/data source.
+val sampleImageUris = remember {
+    listOf(
+        "content://media/external/images/media/12345",
+        "content://media/external/images/media/67890",
+        "content://media/external/images/media/11121"
     )
+}
+
+var showImageDialog by remember { mutableStateOf(false) }
+var dialogImageUri by remember { mutableStateOf<String?>(null) }
+
+Scaffold(
+    topBar = {
+        TopAppBar(
+            title = { Text("Review details") },
+            navigationIcon = {
+                IconButton(onClick = { navController.navigateUp() }) {
+                    Icon(Icons.Filled.ArrowBack, contentDescription = "Back")
+                }
+            }
+        )
+    }
+) { innerPadding ->
+    Column(
+        modifier = Modifier
+            .padding(innerPadding)
+            .fillMaxSize()
+            .padding(16.dp)
+    ) {
+        Text(text = "Review item id: $reviewItemId", style = MaterialTheme.typography.titleMedium)
+        Spacer(modifier = Modifier.height(12.dp))
+
+        Text(text = "Photos", style = MaterialTheme.typography.titleSmall)
+        Spacer(modifier = Modifier.height(8.dp))
+
+        LazyRow(
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            items(sampleImageUris) { uriString ->
+                val uri = Uri.parse(uriString)
+                Card(
+                    modifier = Modifier
+                        .size(160.dp)
+                        .clickable {
+                            dialogImageUri = uriString
+                            showImageDialog = true
+                        },
+                    elevation = CardDefaults.cardElevation(4.dp)
+                ) {
+                    AsyncImage(
+                        model = ImageRequest.Builder(context)
+                            .data(uri)
+                            .listener(onError = { request, result ->
+                                // ErrorResult contains the underlying throwable; log it for debugging.
+                                DiagnosticLogger.e(
+                                    "ImageLoad",
+                                    "Failed to load photo: $uriString",
+                                    result.throwable
+                                )
+                            })
+                            .build(),
+                        contentDescription = "Photo",
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.fillMaxSize()
+                    )
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(20.dp))
+
+        // Placeholder area for additional details you may want to show (status, metadata, buttons, etc.)
+        Text(
+            text = "Details and actions go here. Replace placeholders with your actual UI.",
+            style = MaterialTheme.typography.bodyMedium
+        )
+    }
+}
+
+// Full-screen image dialog with pinch-to-zoom & pan
+if (showImageDialog && dialogImageUri != null) {
+    Dialog(
+        onDismissRequest = { showImageDialog = false; dialogImageUri = null },
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        var scale by remember { mutableStateOf(1f) }
+        var offset by remember { mutableStateOf(Offset.Zero) }
+
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .graphicsLayer {
+                    translationX = offset.x
+                    translationY = offset.y
+                    scaleX = scale
+                    scaleY = scale
+                }
+                .pointerInput(Unit) {
+                    detectTransformGestures { _, pan, zoom, _ ->
+                        // Update scale and offset for simple pinch+pan behavior
+                        scale = (scale * zoom).coerceIn(0.5f, 5f)
+                        offset += pan
+                    }
+                },
+            contentAlignment = Alignment.Center
+        ) {
+            val uri = Uri.parse(dialogImageUri!!)
+            AsyncImage(
+                model = ImageRequest.Builder(context)
+                    .data(uri)
+                    .listener(onError = { request, result ->
+                        DiagnosticLogger.e(
+                            "ImageLoad",
+                            "Failed to load dialog photo: $dialogImageUri",
+                            result.throwable
+                        )
+                    })
+                    .build(),
+                contentDescription = "Full screen photo",
+                contentScale = ContentScale.Fit,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .fillMaxHeight()
+            )
+        }
+    }
 }
