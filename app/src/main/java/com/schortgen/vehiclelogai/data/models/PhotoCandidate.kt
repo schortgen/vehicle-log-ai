@@ -12,5 +12,7 @@ data class PhotoCandidate(
     val width: Int,
     val height: Int,
     val fileSize: Long,
-    val mimeType: String
+    val mimeType: String,
+    // optional bucket/folder name from MediaStore (may be null)
+    val bucket: String? = null
 )
