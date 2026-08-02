@@ -6,6 +6,7 @@ import android.net.Uri
 import android.os.Build
 import android.provider.MediaStore
 import android.provider.MediaStore.Images
+import android.graphics.BitmapFactory
 import com.schortgen.vehiclelogai.data.models.PhotoCandidate
 import com.schortgen.vehiclelogai.data.models.ProcessingStatus
 import com.schortgen.vehiclelogai.data.models.ReviewItem
@@ -32,6 +33,7 @@ class PhotoScannerService(
 
     private val supportedMimeTypes = setOf(
         "image/jpeg",
+        "image/jpg",
         "image/png",
         "image/webp",
         "image/heic",
@@ -42,7 +44,7 @@ class PhotoScannerService(
 
     private val screenshotKeywords = setOf(
         "screenshot", "screen shot", "screen_shot",
-        "capture", "screen capture", "screen_recording",
+        "screen capture", "screen_recording",
         "instagram", "facebook", "twitter", "whatsapp",
         "telegram", "snapchat", "tiktok"
     )
@@ -67,14 +69,15 @@ class PhotoScannerService(
             for (candidate in candidates) {
                 if (photoScannerRepository.isAlreadyImported(candidate.mediaStoreId)) {
                     skippedAlreadyImported++
+                    DiagnosticLogger.d("Scanner", "skip already imported id=${candidate.mediaStoreId} name=${candidate.displayName}")
                     continue
                 }
 
-                if (looksLikeScreenshot(candidate.displayName)) {
+                if (looksLikeScreenshot(candidate.displayName, candidate.bucket)) {
                     skippedScreenshots++
                     DiagnosticLogger.d(
                         "Scanner",
-                        "skip screenshot mediaStoreId=${candidate.mediaStoreId} name=${candidate.displayName}"
+                        "skip screenshot mediaStoreId=${candidate.mediaStoreId} name=${candidate.displayName} bucket=${candidate.bucket}"
                     )
                     continue
                 }
@@ -83,26 +86,26 @@ class PhotoScannerService(
                     skippedSmall++
                     DiagnosticLogger.d(
                         "Scanner",
-                        "skip small mediaStoreId=${candidate.mediaStoreId} ${candidate.width}x${candidate.height}"
+                        "skip small mediaStoreId=${candidate.mediaStoreId} ${candidate.width}x${candidate.height} name=${candidate.displayName}"
                     )
                     continue
                 }
 
-                if (candidate.mimeType !in supportedMimeTypes) {
+                if (candidate.mimeType.isNotBlank() && candidate.mimeType !in supportedMimeTypes) {
                     skippedType++
                     DiagnosticLogger.d(
                         "Scanner",
-                        "skip mime mediaStoreId=${candidate.mediaStoreId} mime=${candidate.mimeType}"
+                        "skip mime mediaStoreId=${candidate.mediaStoreId} mime=${candidate.mimeType} name=${candidate.displayName}"
                     )
                     continue
                 }
 
                 // Filter out images that are unlikely to be vehicle-related based on filename heuristics
-                if (!isVehicleRelated(candidate)) {
+                if (!isVehicleRelated(candidate, candidate.bucket)) {
                     skippedVehicleRelated++
                     DiagnosticLogger.d(
                         "Scanner",
-                        "skip non-vehicle mediaStoreId=${candidate.mediaStoreId} name=${candidate.displayName}"
+                        "skip non-vehicle mediaStoreId=${candidate.mediaStoreId} name=${candidate.displayName} bucket=${candidate.bucket}"
                     )
                     continue
                 }
@@ -145,8 +148,12 @@ class PhotoScannerService(
         }
     }
 
-    private fun looksLikeScreenshot(displayName: String): Boolean {
+    private fun looksLikeScreenshot(displayName: String, bucketName: String?): Boolean {
         val lower = displayName.lowercase()
+        val lowerBucket = bucketName?.lowercase() ?: ""
+        // If the file is in a folder named "Screenshots" treat it as a screenshot
+        if (lowerBucket.contains("screenshot") || lowerBucket.contains("screenshots")) return true
+        // otherwise be conservative with generic keywords
         return screenshotKeywords.any { lower.contains(it) }
     }
 
@@ -167,9 +174,25 @@ class PhotoScannerService(
         "odometer"
     )
 
-    private fun isVehicleRelated(candidate: PhotoCandidate): Boolean {
-        val lower = candidate.displayName.lowercase()
-        return vehicleKeywords.any { lower.contains(it) }
+    private fun isVehicleRelated(candidate: PhotoCandidate, bucketName: String?): Boolean {
+        val lowerName = candidate.displayName.lowercase()
+        val lowerBucket = bucketName?.lowercase() ?: ""
+        // If folder (bucket) contains receipt or invoices, treat as vehicle related
+        if (lowerBucket.contains("receipt") || lowerBucket.contains("receipts") || lowerBucket.contains("invoice")) {
+            return true
+        }
+        // explicit keywords in filename
+        if (vehicleKeywords.any { lowerName.contains(it) }) {
+            return true
+        }
+        // common camera filenames — accept these as likely photos (avoid screenshots by checking bucket above)
+        if (lowerName.startsWith("img_") || lowerName.startsWith("dsc") || lowerName.startsWith("photo_")) {
+            return true
+        }
+        // fallback: accept if name contains "receipt"
+        if (lowerName.contains("receipt") || lowerName.contains("receipts")) return true
+        // otherwise not obviously vehicle related
+        return false
     }
 
     private suspend fun queryMediaStore(): List<PhotoCandidate> = withContext(Dispatchers.IO) {
@@ -187,7 +210,8 @@ class PhotoScannerService(
             Images.Media.WIDTH,
             Images.Media.HEIGHT,
             Images.Media.SIZE,
-            Images.Media.MIME_TYPE
+            Images.Media.MIME_TYPE,
+            Images.Media.BUCKET_DISPLAY_NAME
         )
 
         val sortOrder = "${Images.Media.DATE_TAKEN} DESC"
@@ -208,16 +232,41 @@ class PhotoScannerService(
             val heightCol = c.getColumnIndexOrThrow(Images.Media.HEIGHT)
             val sizeCol = c.getColumnIndexOrThrow(Images.Media.SIZE)
             val mimeCol = c.getColumnIndexOrThrow(Images.Media.MIME_TYPE)
+            val bucketCol = c.getColumnIndexOrThrow(Images.Media.BUCKET_DISPLAY_NAME)
 
             while (c.moveToNext()) {
                 val id = c.getLong(idCol)
                 val displayName = c.getString(nameCol) ?: "image_$id"
                 val dateTaken = c.getLong(dateCol)
-                val width = c.getInt(widthCol)
-                val height = c.getInt(heightCol)
+                var width = c.getInt(widthCol)
+                var height = c.getInt(heightCol)
                 val size = c.getLong(sizeCol)
-                val mime = c.getString(mimeCol) ?: ""
+                var mime = c.getString(mimeCol) ?: ""
+                val bucketName = c.getString(bucketCol)
                 val uri = ContentUris.withAppendedId(collectionUri, id).toString()
+
+                // If width/height are zero, probe image bounds as fallback
+                if (width <= 0 || height <= 0) {
+                    try {
+                        context.contentResolver.openInputStream(Uri.parse(uri))?.use { stream ->
+                            val opts = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                            BitmapFactory.decodeStream(stream, null, opts)
+                            if (opts.outWidth > 0 && opts.outHeight > 0) {
+                                width = opts.outWidth
+                                height = opts.outHeight
+                            }
+                        }
+                    } catch (t: Throwable) {
+                        DiagnosticLogger.d("Scanner", "Failed to decode bounds for $uri: ${t.message}")
+                    }
+                }
+
+                // Accept blank/unknown mime - try to query ContentResolver if blank
+                if (mime.isBlank()) {
+                    try {
+                        mime = context.contentResolver.getType(Uri.parse(uri)) ?: ""
+                    } catch (_: Exception) { /* ignore */ }
+                }
 
                 candidates.add(
                     PhotoCandidate(
@@ -228,7 +277,8 @@ class PhotoScannerService(
                         width = width,
                         height = height,
                         fileSize = size,
-                        mimeType = mime
+                        mimeType = mime,
+                        bucket = bucketName
                     )
                 )
             }
