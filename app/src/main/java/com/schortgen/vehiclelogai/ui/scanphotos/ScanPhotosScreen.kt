@@ -20,12 +20,27 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.schortgen.vehiclelogai.ui.reviewqueue.ReviewQueueViewModel
+import com.schortgen.vehiclelogai.data.models.ReviewItem
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ScanPhotosScreen(
     navController: NavController,
-    viewModel: ScanPhotosViewModel = viewModel(factory = ScanViewModelFactory(LocalContext.current))
+    reviewQueueViewModel: ReviewQueueViewModel,
+    viewModel: ScanPhotosViewModel = viewModel(
+        factory = ScanViewModelFactory(LocalContext.current) { uri ->
+            // Create a lightweight ReviewItem and hand off to the review queue VM.
+            // insertItem launches on the ReviewQueueViewModel scope so this can be called from any dispatcher.
+            reviewQueueViewModel.insertItem(
+                ReviewItem(
+                    photoPath = uri.toString(),
+                    captureDate = System.currentTimeMillis()
+                )
+            )
+            true
+        }
+    )
 ) {
     val context = LocalContext.current
     val fmt = remember { SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()) }
