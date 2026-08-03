@@ -8,30 +8,25 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 /**
- * Simple ViewModel factory for ScanPhotosViewModel.
+ * ViewModel factory for ScanPhotosViewModel.
  *
- * The factory provides a default addToReviewQueue lambda that always returns true —
- * replace the implementation inside create() with a call into your ReviewQueueViewModel
- * or repository to actually enqueue the photo.
+ * It accepts an addToQueueLambda so callers can forward enqueue operations to
+ * the app's ReviewQueueViewModel or repository. A default stub is provided
+ * so existing callers that don't pass a lambda will still get a working factory
+ * (the default simply returns true).
  */
-class ScanViewModelFactory(private val context: Context) : ViewModelProvider.Factory {
+class ScanViewModelFactory(
+    private val context: Context,
+    private val addToQueueLambda: suspend (Uri) -> Boolean = { _ ->
+        // Default stub implementation: mark all items as queued. Replace this
+        // by passing a real lambda that enqueues to your ReviewQueue.
+        withContext(Dispatchers.IO) { true }
+    }
+) : ViewModelProvider.Factory {
+
     override fun <T : ViewModel> create(modelClass: Class<T>): T {
         if (modelClass.isAssignableFrom(ScanPhotosViewModel::class.java)) {
             @Suppress("UNCHECKED_CAST")
-            val addToQueueLambda: suspend (Uri) -> Boolean = { uri ->
-                // TODO: Replace this stub with a real enqueue implementation that uses
-                // your ReviewQueueViewModel or repository. This placeholder simply
-                // returns true to indicate the item was "queued".
-                withContext(Dispatchers.IO) {
-                    try {
-                        // Example placeholder; perform real enqueue here.
-                        true
-                    } catch (_: Exception) {
-                        false
-                    }
-                }
-            }
-
             return ScanPhotosViewModel(addToQueueLambda) as T
         }
         throw IllegalArgumentException("Unknown ViewModel class: ${modelClass.name}")
