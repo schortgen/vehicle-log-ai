@@ -74,7 +74,7 @@ fun NavGraph(navController: NavHostController) {
     )
     val eventGroupingService = EventGroupingService(
         eventRepository = app.eventRepository,
-        reviewItemRepository = app.reviewItemRepository,
+        reviewItemRepository = app.reviewItem_repository,
         vehicleRepository = app.vehicleRepository
     )
     val reviewQueueViewModel: ReviewQueueViewModel = viewModel(
@@ -124,7 +124,7 @@ fun NavGraph(navController: NavHostController) {
         }
 
         composable(Screen.ScanPhotos.route) {
-            ScanPhotosScreen()
+            ScanPhotosScreen(navController, reviewQueueViewModel)
         }
 
         // The Debug screen is only registered in debug builds. Release builds
