@@ -17,6 +17,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.navigation.NavController
@@ -133,7 +134,8 @@ fun ReviewDetailScreen(
                         scaleY = scale
                     }
                     .pointerInput(Unit) {
-                        detectTransformGestures { _, pan, zoom, _ ->
+                        // Explicit parameter types so the compiler can resolve the correct overload
+                        detectTransformGestures { _: Offset, pan: Offset, zoom: Float, _: Float ->
                             scale = (scale * zoom).coerceIn(0.5f, 5f)
                             offset += pan
                         }
