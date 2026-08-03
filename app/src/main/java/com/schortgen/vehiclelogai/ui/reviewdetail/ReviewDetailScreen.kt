@@ -91,7 +91,7 @@ fun ReviewDetailScreen(
                             model = ImageRequest.Builder(context)
                                 .data(uri)
                                 .listener(onError = { _, _ ->
-                                    // Avoid passing ErrorResult where a Throwable was expected.
+                                    // log without passing ErrorResult where Throwable expected
                                     DiagnosticLogger.e("ImageLoad", "Failed to load photo: $uriString")
                                 })
                                 .build(),
@@ -134,7 +134,6 @@ fun ReviewDetailScreen(
                         scaleY = scale
                     }
                     .pointerInput(Unit) {
-                        // Explicit parameter types so the compiler can resolve the correct overload
                         detectTransformGestures { _: Offset, pan: Offset, zoom: Float, _: Float ->
                             scale = (scale * zoom).coerceIn(0.5f, 5f)
                             offset += pan
