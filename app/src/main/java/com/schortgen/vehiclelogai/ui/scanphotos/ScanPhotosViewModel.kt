@@ -1,4 +1,4 @@
-package com.schortgen.vehiclelogai.ui.scan
+package com.schortgen.vehiclelogai.ui.scanphotos
 
 import android.content.ContentUris
 import android.content.Context
