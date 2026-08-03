@@ -47,7 +47,7 @@ fun ReviewDetailScreen(
                 reviewItems.filter { it.eventId == eventId }.mapNotNull { it.photoPath }
             } else {
                 // Single item view
-                val item = reviewQueueViewModel.getReviewItemById(reviewItemId)
+                val item = reviewItems.find { it.id == reviewItemId }
                 listOfNotNull(item?.photoPath)
             }
         )
@@ -111,18 +111,17 @@ fun ReviewDetailScreen(
                                 },
                             elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
                         ) {
+                            val data = if (uriString.startsWith("content://") || uriString.startsWith("file://")) Uri.parse(uriString) else uriString
                             val model = ImageRequest.Builder(context)
-                                .data(if (uriString.startsWith("content://") || uriString.startsWith("file://")) Uri.parse(uriString) else uriString)
+                                .data(data)
+                                .listener(onError = { _, _ -> DiagnosticLogger.e("ImageLoad", "Failed to load photo: $uriString") })
                                 .build()
 
                             AsyncImage(
                                 model = model,
                                 contentDescription = "Photo",
                                 contentScale = ContentScale.Crop,
-                                modifier = Modifier.fillMaxSize(),
-                                onError = { _, _ ->
-                                    DiagnosticLogger.e("ImageLoad", "Failed to load photo: $uriString")
-                                }
+                                modifier = Modifier.fillMaxSize()
                             )
                         }
                     }
