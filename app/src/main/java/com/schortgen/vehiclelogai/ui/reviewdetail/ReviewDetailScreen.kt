@@ -1,52 +1,29 @@
 package com.schortgen.vehiclelogai.ui.reviewdetail
 
-import androidx.compose.foundation.background
+import android.net.Uri
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
+import androidx.navigation.NavController
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
-import androidx.compose.ui.platform.LocalContext
-import coil.compose.rememberAsyncImagePainter
-import android.net.Uri
 import com.schortgen.vehiclelogai.debug.DiagnosticLogger
-import com.schortgen.vehiclelogai.data.models.FuelPurchasesCandidate
-import com.schortgen.vehiclelogai.data.models.ProcessingStatus
-import com.schortgen.vehiclelogai.data.models.ReviewItem
-import com.schortgen.vehiclelogai.data.models.Vehicle
 import com.schortgen.vehiclelogai.ui.reviewqueue.ReviewQueueViewModel
-import java.text.SimpleDateFormat
-import java.util.*
-import androidx.compose.runtime.*
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.scale
-import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
-import androidx.compose.ui.window.DialogProperties
-import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -58,132 +35,126 @@ fun ReviewDetailScreen(
 ) {
     val context = LocalContext.current
 
-// Example placeholder images. Replace with actual URIs from your ViewModel/data source.
-val sampleImageUris = remember {
-    listOf(
-        "content://media/external/images/media/12345",
-        "content://media/external/images/media/67890",
-        "content://media/external/images/media/11121"
-    )
-}
-
-var showImageDialog by remember { mutableStateOf(false) }
-var dialogImageUri by remember { mutableStateOf<String?>(null) }
-
-Scaffold(
-    topBar = {
-        TopAppBar(
-            title = { Text("Review details") },
-            navigationIcon = {
-                IconButton(onClick = { navController.navigateUp() }) {
-                    Icon(Icons.Filled.ArrowBack, contentDescription = "Back")
-                }
-            }
+    // Replace these sample URIs with your real data source
+    val sampleImageUris = remember {
+        listOf(
+            "content://media/external/images/media/12345",
+            "content://media/external/images/media/67890",
+            "content://media/external/images/media/11121"
         )
     }
-) { innerPadding ->
-    Column(
-        modifier = Modifier
-            .padding(innerPadding)
-            .fillMaxSize()
-            .padding(16.dp)
-    ) {
-        Text(text = "Review item id: $reviewItemId", style = MaterialTheme.typography.titleMedium)
-        Spacer(modifier = Modifier.height(12.dp))
 
-        Text(text = "Photos", style = MaterialTheme.typography.titleSmall)
-        Spacer(modifier = Modifier.height(8.dp))
+    var showImageDialog by remember { mutableStateOf(false) }
+    var dialogImageUri by remember { mutableStateOf<String?>(null) }
 
-        LazyRow(
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            items(sampleImageUris) { uriString ->
-                val uri = Uri.parse(uriString)
-                Card(
-                    modifier = Modifier
-                        .size(160.dp)
-                        .clickable {
-                            dialogImageUri = uriString
-                            showImageDialog = true
-                        },
-                    elevation = CardDefaults.cardElevation(4.dp)
-                ) {
-                    AsyncImage(
-                        model = ImageRequest.Builder(context)
-                            .data(uri)
-                            .listener(onError = { request, result ->
-                                // ErrorResult contains the underlying throwable; log it for debugging.
-                                DiagnosticLogger.e(
-                                    "ImageLoad",
-                                    "Failed to load photo: $uriString",
-                                    result.throwable
-                                )
-                            })
-                            .build(),
-                        contentDescription = "Photo",
-                        contentScale = ContentScale.Crop,
-                        modifier = Modifier.fillMaxSize()
-                    )
-                }
-            }
-        }
-
-        Spacer(modifier = Modifier.height(20.dp))
-
-        // Placeholder area for additional details you may want to show (status, metadata, buttons, etc.)
-        Text(
-            text = "Details and actions go here. Replace placeholders with your actual UI.",
-            style = MaterialTheme.typography.bodyMedium
-        )
-    }
-}
-
-// Full-screen image dialog with pinch-to-zoom & pan
-if (showImageDialog && dialogImageUri != null) {
-    Dialog(
-        onDismissRequest = { showImageDialog = false; dialogImageUri = null },
-        properties = DialogProperties(usePlatformDefaultWidth = false)
-    ) {
-        var scale by remember { mutableStateOf(1f) }
-        var offset by remember { mutableStateOf(Offset.Zero) }
-
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .graphicsLayer {
-                    translationX = offset.x
-                    translationY = offset.y
-                    scaleX = scale
-                    scaleY = scale
-                }
-                .pointerInput(Unit) {
-                    detectTransformGestures { _, pan, zoom, _ ->
-                        // Update scale and offset for simple pinch+pan behavior
-                        scale = (scale * zoom).coerceIn(0.5f, 5f)
-                        offset += pan
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("Review details") },
+                navigationIcon = {
+                    IconButton(onClick = { navController.navigateUp() }) {
+                        Icon(Icons.Filled.ArrowBack, contentDescription = "Back")
                     }
-                },
-            contentAlignment = Alignment.Center
-        ) {
-            val uri = Uri.parse(dialogImageUri!!)
-            AsyncImage(
-                model = ImageRequest.Builder(context)
-                    .data(uri)
-                    .listener(onError = { request, result ->
-                        DiagnosticLogger.e(
-                            "ImageLoad",
-                            "Failed to load dialog photo: $dialogImageUri",
-                            result.throwable
-                        )
-                    })
-                    .build(),
-                contentDescription = "Full screen photo",
-                contentScale = ContentScale.Fit,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .fillMaxHeight()
+                }
             )
+        }
+    ) { innerPadding ->
+        Column(
+            modifier = Modifier
+                .padding(innerPadding)
+                .fillMaxSize()
+                .padding(16.dp)
+        ) {
+            Text(text = "Review item id: $reviewItemId", style = MaterialTheme.typography.titleMedium)
+            Spacer(modifier = Modifier.height(12.dp))
+
+            Text(text = "Photos", style = MaterialTheme.typography.titleSmall)
+            Spacer(modifier = Modifier.height(8.dp))
+
+            LazyRow(
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                items(sampleImageUris) { uriString ->
+                    val uri = Uri.parse(uriString)
+                    Card(
+                        modifier = Modifier
+                            .size(160.dp)
+                            .clickable {
+                                dialogImageUri = uriString
+                                showImageDialog = true
+                            },
+                        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+                    ) {
+                        AsyncImage(
+                            model = ImageRequest.Builder(context)
+                                .data(uri)
+                                .listener(onError = { _, _ ->
+                                    // Avoid passing ErrorResult where a Throwable was expected.
+                                    DiagnosticLogger.e("ImageLoad", "Failed to load photo: $uriString")
+                                })
+                                .build(),
+                            contentDescription = "Photo",
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(20.dp))
+
+            Text(
+                text = "Details and actions go here. Replace placeholders with your actual UI.",
+                style = MaterialTheme.typography.bodyMedium
+            )
+        }
+    }
+
+    // Full-screen image dialog with pinch-to-zoom & pan
+    if (showImageDialog && dialogImageUri != null) {
+        Dialog(
+            onDismissRequest = {
+                showImageDialog = false
+                dialogImageUri = null
+            },
+            properties = DialogProperties(usePlatformDefaultWidth = false)
+        ) {
+            var scale by remember { mutableStateOf(1f) }
+            var offset by remember { mutableStateOf(Offset.Zero) }
+
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .graphicsLayer {
+                        translationX = offset.x
+                        translationY = offset.y
+                        scaleX = scale
+                        scaleY = scale
+                    }
+                    .pointerInput(Unit) {
+                        detectTransformGestures { _, pan, zoom, _ ->
+                            scale = (scale * zoom).coerceIn(0.5f, 5f)
+                            offset += pan
+                        }
+                    },
+                contentAlignment = Alignment.Center
+            ) {
+                val uri = Uri.parse(dialogImageUri!!)
+                AsyncImage(
+                    model = ImageRequest.Builder(context)
+                        .data(uri)
+                        .listener(onError = { _, _ ->
+                            DiagnosticLogger.e("ImageLoad", "Failed to load dialog photo: $dialogImageUri")
+                        })
+                        .build(),
+                    contentDescription = "Full screen photo",
+                    contentScale = ContentScale.Fit,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .fillMaxHeight()
+                )
+            }
         }
     }
 }
