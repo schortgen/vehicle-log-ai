@@ -36,12 +36,20 @@ fun ReviewDetailScreen(
 ) {
     val context = LocalContext.current
 
-    // Replace these sample URIs with your real data source
-    val sampleImageUris = remember {
-        listOf(
-            "content://media/external/images/media/12345",
-            "content://media/external/images/media/67890",
-            "content://media/external/images/media/11121"
+    // Observe the current list of review items so we can find photos for this item or event
+    val reviewItems by reviewQueueViewModel.reviewItems.collectAsState()
+
+    // Build list of image URIs to display for this screen
+    val imagePaths by remember(reviewItems, reviewItemId, eventId) {
+        mutableStateOf(
+            if (eventId >= 0) {
+                // Show all photos associated with this event
+                reviewItems.filter { it.eventId == eventId }.mapNotNull { it.photoPath }
+            } else {
+                // Single item view
+                val item = reviewQueueViewModel.getReviewItemById(reviewItemId)
+                listOfNotNull(item?.photoPath)
+            }
         )
     }
 
@@ -72,33 +80,51 @@ fun ReviewDetailScreen(
             Text(text = "Photos", style = MaterialTheme.typography.titleSmall)
             Spacer(modifier = Modifier.height(8.dp))
 
-            LazyRow(
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                items(sampleImageUris) { uriString ->
-                    val uri = Uri.parse(uriString)
-                    Card(
-                        modifier = Modifier
-                            .size(160.dp)
-                            .clickable {
-                                dialogImageUri = uriString
-                                showImageDialog = true
-                            },
-                        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
-                    ) {
-                        AsyncImage(
-                            model = ImageRequest.Builder(context)
-                                .data(uri)
-                                .listener(onError = { _, _ ->
-                                    // log without passing ErrorResult where Throwable expected
-                                    DiagnosticLogger.e("ImageLoad", "Failed to load photo: $uriString")
-                                })
-                                .build(),
-                            contentDescription = "Photo",
-                            contentScale = ContentScale.Crop,
-                            modifier = Modifier.fillMaxSize()
+            if (imagePaths.isEmpty()) {
+                // No images available for this review item — show placeholder text
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(160.dp),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+                ) {
+                    Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
+                        Text(
+                            text = "No photo available",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
+                    }
+                }
+            } else {
+                LazyRow(
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    items(imagePaths) { uriString ->
+                        Card(
+                            modifier = Modifier
+                                .size(160.dp)
+                                .clickable {
+                                    dialogImageUri = uriString
+                                    showImageDialog = true
+                                },
+                            elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+                        ) {
+                            val model = ImageRequest.Builder(context)
+                                .data(if (uriString.startsWith("content://") || uriString.startsWith("file://")) Uri.parse(uriString) else uriString)
+                                .build()
+
+                            AsyncImage(
+                                model = model,
+                                contentDescription = "Photo",
+                                contentScale = ContentScale.Crop,
+                                modifier = Modifier.fillMaxSize(),
+                                onError = { _, _ ->
+                                    DiagnosticLogger.e("ImageLoad", "Failed to load photo: $uriString")
+                                }
+                            )
+                        }
                     }
                 }
             }
@@ -141,14 +167,14 @@ fun ReviewDetailScreen(
                     },
                 contentAlignment = Alignment.Center
             ) {
-                val uri = Uri.parse(dialogImageUri!!)
+                val uriString = dialogImageUri!!
+                val model = ImageRequest.Builder(context)
+                    .data(if (uriString.startsWith("content://") || uriString.startsWith("file://")) Uri.parse(uriString) else uriString)
+                    .listener(onError = { _, _ -> DiagnosticLogger.e("ImageLoad", "Failed to load dialog photo: $dialogImageUri") })
+                    .build()
+
                 AsyncImage(
-                    model = ImageRequest.Builder(context)
-                        .data(uri)
-                        .listener(onError = { _, _ ->
-                            DiagnosticLogger.e("ImageLoad", "Failed to load dialog photo: $dialogImageUri")
-                        })
-                        .build(),
+                    model = model,
                     contentDescription = "Full screen photo",
                     contentScale = ContentScale.Fit,
                     modifier = Modifier
