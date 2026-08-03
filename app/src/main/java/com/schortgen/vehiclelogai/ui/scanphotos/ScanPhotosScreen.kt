@@ -1,7 +1,12 @@
 package com.schortgen.vehiclelogai.ui.scanphotos
 
+import android.Manifest
 import android.app.DatePickerDialog
 import android.content.Context
+import android.content.pm.PackageManager
+import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -13,6 +18,7 @@ import java.text.SimpleDateFormat
 import java.util.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -23,6 +29,27 @@ fun ScanPhotosScreen(
 ) {
     val context = LocalContext.current
     val fmt = remember { SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()) }
+
+    // Permission handling
+    val requiredPermission = remember {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            Manifest.permission.READ_MEDIA_IMAGES
+        } else {
+            Manifest.permission.READ_EXTERNAL_STORAGE
+        }
+    }
+
+    var hasPermission by remember {
+        mutableStateOf(
+            ContextCompat.checkSelfPermission(context, requiredPermission) == PackageManager.PERMISSION_GRANTED
+        )
+    }
+
+    val permissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        hasPermission = granted
+    }
 
     val startMillis by viewModel.startDateMillis.collectAsState()
     val endMillis by viewModel.endDateMillis.collectAsState()
@@ -58,7 +85,14 @@ fun ScanPhotosScreen(
 
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Button(
-                    onClick = { viewModel.scanPhotos(context) },
+                    onClick = {
+                        // If permission not granted, request it first. Otherwise start scan.
+                        if (!hasPermission) {
+                            permissionLauncher.launch(requiredPermission)
+                        } else {
+                            viewModel.scanPhotos(context)
+                        }
+                    },
                     enabled = !isScanning,
                     modifier = Modifier.weight(1f)
                 ) {
@@ -73,12 +107,26 @@ fun ScanPhotosScreen(
                 }
             }
 
+            // Show permission status & hint
+            if (!hasPermission) {
+                Text(
+                    text = "Permission required to read images. Tap Start to request permission.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+
             if (isScanning) {
                 if (total == null) {
                     LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
                 } else {
                     val progress = (scanned.coerceAtMost(total ?: 1).toFloat() / (total ?: 1).toFloat())
                     LinearProgressIndicator(progress = progress, modifier = Modifier.fillMaxWidth())
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = "${scanned} / ${total ?: "?"} scanned",
+                        style = MaterialTheme.typography.bodySmall
+                    )
                 }
             }
 
