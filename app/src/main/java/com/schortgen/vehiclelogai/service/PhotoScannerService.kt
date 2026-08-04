@@ -49,16 +49,27 @@ class PhotoScannerService(
         "telegram", "snapchat", "tiktok"
     )
 
+    private val nonVehicleKeywords = setOf(
+        "flower", "flowers", "plant", "garden", "nature",
+        "pet", "dog", "cat", "food", "dish", "meal",
+        "selfie", "portrait", "family", "vacation", "beach",
+        "party", "concert", "sunset", "sky"
+    )
+
     /**
      * Scan the MediaStore for new photos and create ReviewItems for them.
+     * Optionally filtered by start and end date range (in milliseconds).
      *
      * @return the number of new photos imported
      */
-    suspend fun scanAndImport(): Int = withContext(Dispatchers.IO) {
+    suspend fun scanAndImport(
+        startDateMillis: Long? = null,
+        endDateMillis: Long? = null
+    ): Int = withContext(Dispatchers.IO) {
         val startedAt = System.nanoTime()
-        DiagnosticLogger.i("Scanner", "scanAndImport begin")
+        DiagnosticLogger.i("Scanner", "scanAndImport begin (range: $startDateMillis .. $endDateMillis)")
         try {
-            val candidates = queryMediaStore()
+            val candidates = queryMediaStore(startDateMillis, endDateMillis)
             var importedCount = 0
             var skippedAlreadyImported = 0
             var skippedScreenshots = 0
@@ -171,14 +182,33 @@ class PhotoScannerService(
         "inspection",
         "registration",
         "vin",
-        "odometer"
+        "odometer",
+        "gas",
+        "pump",
+        "station",
+        "chevron",
+        "shell",
+        "exxon",
+        "mobil",
+        "valero",
+        "costco",
+        "car",
+        "truck",
+        "auto",
+        "vehicle"
     )
 
     private fun isVehicleRelated(candidate: PhotoCandidate, bucketName: String?): Boolean {
         val lowerName = candidate.displayName.lowercase()
         val lowerBucket = bucketName?.lowercase() ?: ""
-        // If folder (bucket) contains receipt or invoices, treat as vehicle related
-        if (lowerBucket.contains("receipt") || lowerBucket.contains("receipts") || lowerBucket.contains("invoice")) {
+
+        // Explicit non-vehicle check: if filename or bucket clearly indicates non-vehicle item (e.g., flower, garden, food, selfie)
+        if (nonVehicleKeywords.any { lowerName.contains(it) || lowerBucket.contains(it) }) {
+            return false
+        }
+
+        // If folder (bucket) contains receipt or invoices or vehicle, treat as vehicle related
+        if (lowerBucket.contains("receipt") || lowerBucket.contains("receipts") || lowerBucket.contains("invoice") || lowerBucket.contains("vehicle") || lowerBucket.contains("car")) {
             return true
         }
         // explicit keywords in filename
@@ -186,7 +216,7 @@ class PhotoScannerService(
             return true
         }
         // common camera filenames — accept these as likely photos (avoid screenshots by checking bucket above)
-        if (lowerName.startsWith("img_") || lowerName.startsWith("dsc") || lowerName.startsWith("photo_")) {
+        if (lowerName.startsWith("img_") || lowerName.startsWith("dsc") || lowerName.startsWith("photo_") || lowerName.startsWith("pxl_") || lowerName.startsWith("202")) {
             return true
         }
         // fallback: accept if name contains "receipt"
@@ -195,7 +225,10 @@ class PhotoScannerService(
         return false
     }
 
-    private suspend fun queryMediaStore(): List<PhotoCandidate> = withContext(Dispatchers.IO) {
+    private suspend fun queryMediaStore(
+        startDateMillis: Long? = null,
+        endDateMillis: Long? = null
+    ): List<PhotoCandidate> = withContext(Dispatchers.IO) {
         val candidates = mutableListOf<PhotoCandidate>()
         val collectionUri: Uri = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             Images.Media.getContentUri(MediaStore.VOLUME_EXTERNAL)
@@ -214,13 +247,26 @@ class PhotoScannerService(
             Images.Media.BUCKET_DISPLAY_NAME
         )
 
+        val selectionBuilder = StringBuilder()
+        val selectionArgs = ArrayList<String>()
+
+        if (startDateMillis != null) {
+            selectionBuilder.append("${Images.Media.DATE_TAKEN} >= ?")
+            selectionArgs.add(startDateMillis.toString())
+        }
+        if (endDateMillis != null) {
+            if (selectionBuilder.isNotEmpty()) selectionBuilder.append(" AND ")
+            selectionBuilder.append("${Images.Media.DATE_TAKEN} <= ?")
+            selectionArgs.add(endDateMillis.toString())
+        }
+
         val sortOrder = "${Images.Media.DATE_TAKEN} DESC"
 
         val cursor = context.contentResolver.query(
             collectionUri,
             projection,
-            null,
-            null,
+            if (selectionBuilder.isNotEmpty()) selectionBuilder.toString() else null,
+            if (selectionArgs.isNotEmpty()) selectionArgs.toTypedArray() else null,
             sortOrder
         )
 

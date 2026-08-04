@@ -61,6 +61,8 @@ class ScanPhotosViewModel(
                 // Build selection for MediaStore
                 val projection = arrayOf(
                     MediaStore.Images.Media._ID,
+                    MediaStore.Images.Media.DISPLAY_NAME,
+                    MediaStore.Images.Media.BUCKET_DISPLAY_NAME,
                     MediaStore.Images.Media.DATE_TAKEN,
                     MediaStore.Images.Media.DATE_ADDED
                 )
@@ -95,6 +97,13 @@ class ScanPhotosViewModel(
                     _totalToScan.value = cursor.count
                 }
 
+                val nonVehicleKeywords = setOf(
+                    "flower", "flowers", "plant", "garden", "nature",
+                    "pet", "dog", "cat", "food", "dish", "meal",
+                    "selfie", "portrait", "family", "vacation", "beach",
+                    "party", "concert", "sunset", "sky"
+                )
+
                 // Now iterate and process
                 context.contentResolver.query(
                     uri,
@@ -104,11 +113,21 @@ class ScanPhotosViewModel(
                     "${MediaStore.Images.Media.DATE_TAKEN} ASC"
                 )?.use { cursor ->
                     val idIndex = cursor.getColumnIndexOrThrow(MediaStore.Images.Media._ID)
+                    val nameIndex = cursor.getColumnIndex(MediaStore.Images.Media.DISPLAY_NAME)
+                    val bucketIndex = cursor.getColumnIndex(MediaStore.Images.Media.BUCKET_DISPLAY_NAME)
 
                     while (isActive && cursor.moveToNext()) {
                         _scannedCount.value = _scannedCount.value + 1
 
                         val id = cursor.getLong(idIndex)
+                        val displayName = if (nameIndex >= 0) cursor.getString(nameIndex)?.lowercase() ?: "" else ""
+                        val bucketName = if (bucketIndex >= 0) cursor.getString(bucketIndex)?.lowercase() ?: "" else ""
+
+                        if (nonVehicleKeywords.any { displayName.contains(it) || bucketName.contains(it) }) {
+                            // Skip non-vehicle photo
+                            continue
+                        }
+
                         val contentUri = ContentUris.withAppendedId(uri, id)
                         try {
                             // Attempt to add to review queue. The addToReviewQueue should return true if enqueued.

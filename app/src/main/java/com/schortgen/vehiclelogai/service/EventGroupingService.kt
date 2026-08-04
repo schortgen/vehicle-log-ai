@@ -54,6 +54,28 @@ class EventGroupingService(
             get() = items.maxOf { it.captureDate }
     }
 
+    private val nonVehicleTerms = setOf(
+        "flower", "flowers", "plant", "garden", "nature",
+        "pet", "dog", "cat", "food", "dish", "meal",
+        "selfie", "portrait", "family", "vacation", "beach",
+        "party", "concert", "sunset", "sky"
+    )
+
+    private fun isVehicleRelatedItem(item: ReviewItem): Boolean {
+        val ocr = item.ocrText?.lowercase() ?: ""
+        val path = item.photoPath?.lowercase() ?: ""
+        val reason = item.reason?.lowercase() ?: ""
+
+        val containsNonVehicle = nonVehicleTerms.any { ocr.contains(it) || path.contains(it) || reason.contains(it) }
+        val vehicleTerms = setOf("fuel", "gallons", "gas", "pump", "station", "odometer", "receipt", "service", "oil", "tire", "total", "cost", "invoice", "price", "vehicle", "car", "truck")
+        val containsVehicle = vehicleTerms.any { ocr.contains(it) || path.contains(it) || reason.contains(it) }
+
+        if (containsNonVehicle && !containsVehicle) {
+            return false
+        }
+        return true
+    }
+
     /**
      * Group ungrouped ReviewItems into clusters based on capture time.
      * Only considers items with status NEEDS_REVIEW or COMPLETE that have no eventId.
@@ -61,8 +83,12 @@ class EventGroupingService(
     fun groupItemsIntoClusters(items: List<ReviewItem>): List<PhotoCluster> {
         if (items.isEmpty()) return emptyList()
 
+        // Filter out non-vehicle photos (e.g., photos of flowers, plants, pets, food)
+        val vehicleItems = items.filter { isVehicleRelatedItem(it) }
+        if (vehicleItems.isEmpty()) return emptyList()
+
         // Sort by captureDate ascending
-        val sorted = items.sortedBy { it.captureDate }
+        val sorted = vehicleItems.sortedBy { it.captureDate }
 
         val clusters = mutableListOf<PhotoCluster>()
         var currentCluster = mutableListOf<ReviewItem>()

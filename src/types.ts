@@ -63,3 +63,126 @@ export interface ReviewItem {
   ocrText?: string;
   parsedData?: ParsedReceiptData;
 }
+
+export interface AuthState {
+  isAuthenticated: boolean;
+  user: GitHubUser | null;
+  token: string | null;
+}
+
+export interface GitHubUser {
+  login: string;
+  id: number;
+  avatar_url: string;
+  html_url?: string;
+  name?: string;
+  email?: string;
+  company?: string;
+  blog?: string;
+  location?: string;
+  bio?: string;
+  public_repos?: number;
+  public_gists?: number;
+  followers?: number;
+  following?: number;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface GitHubRepo {
+  id: number;
+  name: string;
+  full_name: string;
+  private: boolean;
+  fork?: boolean;
+  html_url: string;
+  url?: string;
+  git_url?: string;
+  ssh_url?: string;
+  clone_url?: string;
+  description: string | null;
+  stargazers_count: number;
+  watchers_count?: number;
+  forks_count: number;
+  open_issues_count: number;
+  size?: number;
+  language?: string | null;
+  topics?: string[];
+  created_at?: string;
+  updated_at: string;
+  pushed_at?: string;
+  default_branch: string;
+  owner: {
+    login: string;
+    avatar_url: string;
+    html_url?: string;
+  };
+}
+
+export interface FileItem {
+  name: string;
+  path: string;
+  sha: string;
+  size: number;
+  url: string;
+  html_url?: string;
+  git_url?: string;
+  type: 'file' | 'dir';
+  download_url?: string | null;
+  content?: string;
+  encoding?: string;
+}
+
+export interface GitHubIssue {
+  id: number;
+  number: number;
+  title: string;
+  body: string | null;
+  state: 'open' | 'closed';
+  user: {
+    login: string;
+    avatar_url: string;
+    html_url?: string;
+  };
+  created_at: string;
+  updated_at: string;
+  comments: number;
+  html_url: string;
+  labels: { id: number; name: string; color: string }[];
+}
+
+export interface GitHubPullRequest {
+  id: number;
+  number: number;
+  title: string;
+  body: string | null;
+  state: 'open' | 'closed' | 'merged';
+  user: {
+    login: string;
+    avatar_url: string;
+    html_url?: string;
+  };
+  created_at: string;
+  updated_at: string;
+  html_url: string;
+  head: { ref: string; label?: string; sha?: string };
+  base: { ref: string; label?: string; sha?: string };
+}
+
+export interface GitHubCommit {
+  sha: string;
+  commit: {
+    author: {
+      name: string;
+      email: string;
+      date: string;
+    };
+    message: string;
+  };
+  html_url: string;
+  author?: {
+    login: string;
+    avatar_url: string;
+  };
+}
+

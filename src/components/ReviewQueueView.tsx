@@ -164,18 +164,63 @@ export const ReviewQueueView: React.FC<ReviewQueueViewProps> = ({
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {/* Photo preview */}
-                <div className="space-y-2">
-                  <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider block">
-                    Receipt Photo
-                  </span>
-                  <div className="bg-slate-950 border border-slate-800 rounded-xl p-2 flex items-center justify-center min-h-[220px]">
-                    <img
-                      src={selectedItem.photoPath || 'https://images.unsplash.com/photo-1554224155-8d04cb21cd6c?w=600&auto=format&fit=crop&q=80'}
-                      alt="Scanned receipt"
-                      className="max-h-56 rounded object-contain"
-                    />
+                {/* Grouped Event Photos preview */}
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider block">
+                      Grouped Event Photos
+                    </span>
+                    <span className="text-[11px] text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
+                      Auto-Grouped by Date
+                    </span>
                   </div>
+
+                  {/* Find items on same date (same YYYY-MM-DD or date string) */}
+                  {(() => {
+                    const itemDate = selectedItem.parsedData?.date || new Date(selectedItem.captureDate).toISOString().split('T')[0];
+                    const sameDateItems = reviewItems.filter((other) => {
+                      const otherDate = other.parsedData?.date || new Date(other.captureDate).toISOString().split('T')[0];
+                      const ocr = (other.ocrText || '').toLowerCase();
+                      const reason = (other.reason || '').toLowerCase();
+                      // Exclude non-vehicle photos (flowers, pets, food)
+                      const isNonVehicle = ['flower', 'plant', 'garden', 'pet', 'dog', 'cat', 'food', 'selfie'].some(
+                        (term) => ocr.includes(term) || reason.includes(term)
+                      );
+                      return otherDate === itemDate && !isNonVehicle;
+                    });
+
+                    return (
+                      <div className="space-y-2">
+                        <div className="grid grid-cols-2 gap-2">
+                          {sameDateItems.map((photoItem) => {
+                            const ocrLower = (photoItem.ocrText || photoItem.reason || '').toLowerCase();
+                            let badge = 'Receipt';
+                            if (ocrLower.includes('odometer') || ocrLower.includes('mile')) badge = 'Odometer';
+                            else if (ocrLower.includes('pump') || ocrLower.includes('station')) badge = 'Gas Station';
+
+                            return (
+                              <div
+                                key={photoItem.id}
+                                className="bg-slate-950 border border-slate-800 rounded-xl p-2 text-center space-y-1 relative group"
+                              >
+                                <img
+                                  src={photoItem.photoPath || 'https://images.unsplash.com/photo-1554224155-8d04cb21cd6c?w=600&auto=format&fit=crop&q=80'}
+                                  alt={badge}
+                                  className="h-28 mx-auto rounded object-contain"
+                                />
+                                <span className="inline-block text-[10px] font-bold px-2 py-0.5 bg-slate-800 text-amber-300 rounded border border-slate-700">
+                                  {badge}
+                                </span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                        <p className="text-[11px] text-slate-400 italic">
+                          Photos taken on {itemDate} (odometer, receipt, pump) are grouped together. Unrelated photos (e.g. flowers) are filtered out.
+                        </p>
+                      </div>
+                    );
+                  })()}
                 </div>
 
                 {/* Form fields */}
