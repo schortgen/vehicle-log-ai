@@ -2,7 +2,7 @@ name: Android Build Pipeline
 
 on:
   push:
-    branches: [ "main", "Base" ] # Triggers the build every time you push code to main
+    branches: [ "main" ] # Triggers the build every time you push code to main
 
 jobs:
   build:
