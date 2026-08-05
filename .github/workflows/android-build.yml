@@ -34,4 +34,4 @@ jobs:
         prerelease: false
         files: app/build/outputs/apk/debug/app-Base-debug.apk
       env:
-      
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
