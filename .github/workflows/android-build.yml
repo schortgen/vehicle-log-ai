@@ -2,7 +2,9 @@ name: Android Build Pipeline
 
 on:
   push:
-    branches: [ "main" ] # Triggers the build every time you push code to main
+    branches: [ "main", "Base" ] # Triggers the build every time you push code to main
+
+workflow_dispatch:     # Enables manual "Run workflow" button for any branch
 
 jobs:
   build:
