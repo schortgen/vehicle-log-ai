@@ -422,12 +422,33 @@ fun ReviewDetailScreen(
                     modifier = Modifier.padding(16.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    Text(
-                        text = "Suggested Values",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "Suggested Values",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        if (activeItem != null) {
+                            val isProcessing = ocrProcessingIds.contains(activeItem.id)
+                            TextButton(
+                                onClick = { reviewQueueViewModel.processOcr(activeItem.id) },
+                                enabled = !isProcessing
+                            ) {
+                                if (isProcessing) {
+                                    CircularProgressIndicator(modifier = Modifier.size(14.dp), strokeWidth = 2.dp)
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text("Extracting...", style = MaterialTheme.typography.labelSmall)
+                                } else {
+                                    Text("⚡ Re-extract Data", style = MaterialTheme.typography.labelSmall)
+                                }
+                            }
+                        }
+                    }
 
                     SuggestedValueField(
                         label = "Station Name",
@@ -620,12 +641,34 @@ fun ReviewDetailScreen(
                 colors = CardDefaults.cardColors(containerColor = cardBackgroundColor)
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
-                    Text(
-                        text = "Raw OCR Text",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "Raw OCR Text",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        if (activeItem != null) {
+                            val isProcessing = ocrProcessingIds.contains(activeItem.id)
+                            OutlinedButton(
+                                onClick = { reviewQueueViewModel.processOcr(activeItem.id) },
+                                enabled = !isProcessing,
+                                shape = RoundedCornerShape(16.dp)
+                            ) {
+                                if (isProcessing) {
+                                    CircularProgressIndicator(modifier = Modifier.size(14.dp), strokeWidth = 2.dp)
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text("Extracting...", style = MaterialTheme.typography.labelSmall)
+                                } else {
+                                    Text("Re-extract Data", style = MaterialTheme.typography.labelSmall)
+                                }
+                            }
+                        }
+                    }
                     Spacer(modifier = Modifier.height(12.dp))
 
                     if (!activeItem?.ocrText.isNullOrBlank()) {
@@ -636,21 +679,10 @@ fun ReviewDetailScreen(
                         )
                     } else {
                         Text(
-                            text = "No OCR data yet. Tap \"Extract Receipt Data\" to process this photo.",
+                            text = "No OCR data yet. Tap \"Re-extract Data\" to process this photo.",
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
-                        Spacer(modifier = Modifier.height(12.dp))
-                        Button(
-                            onClick = {
-                                if (activeItem != null) {
-                                    reviewQueueViewModel.processOcr(activeItem.id)
-                                }
-                            },
-                            shape = RoundedCornerShape(20.dp)
-                        ) {
-                            Text("Extract Receipt Data")
-                        }
                     }
                 }
             }
