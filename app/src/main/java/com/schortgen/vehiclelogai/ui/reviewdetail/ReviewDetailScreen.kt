@@ -93,6 +93,7 @@ fun ReviewDetailScreen(
     val vehiclesState by (reviewQueueViewModel.vehicles?.collectAsState() ?: remember { mutableStateOf(emptyList()) })
     val vehicles = vehiclesState ?: emptyList()
     val saveError by reviewQueueViewModel.saveErrors.collectAsState()
+    val ocrProcessingIds by reviewQueueViewModel.ocrProcessingIds.collectAsState()
 
     val currentItem = remember(reviewItems, reviewItemId) {
         reviewItems.find { it.id == reviewItemId }
