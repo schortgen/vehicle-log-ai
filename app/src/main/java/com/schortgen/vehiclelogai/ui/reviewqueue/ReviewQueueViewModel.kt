@@ -188,7 +188,7 @@ class ReviewQueueViewModel(
         }
 
         val defaultVehicle = Vehicle(
-            name = "My Vehicle",
+            nickname = "My Vehicle",
             make = "",
             model = "",
             year = 2024
