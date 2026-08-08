@@ -115,9 +115,27 @@ fun ReviewDetailScreen(
     var selectedPhotoIndex by remember(groupItems) { mutableStateOf(0) }
     val activeItem = groupItems.getOrNull(selectedPhotoIndex.coerceIn(0, (groupItems.size - 1).coerceAtLeast(0))) ?: currentItem
 
-    var selectedVehicleId by remember(activeItem, vehicles) {
-        mutableStateOf(activeItem?.vehicleId ?: vehicles.firstOrNull()?.id)
+    var userSelectedVehicleId by remember { mutableStateOf<Long?>(null) }
+    var initialVehicleListLoaded by remember { mutableStateOf(false) }
+    var prevVehicleCount by remember { mutableStateOf(vehicles.size) }
+
+    LaunchedEffect(vehicles) {
+        if (!initialVehicleListLoaded) {
+            if (vehicles.isNotEmpty()) {
+                initialVehicleListLoaded = true
+                prevVehicleCount = vehicles.size
+            }
+        } else {
+            if (vehicles.size > prevVehicleCount) {
+                userSelectedVehicleId = vehicles.lastOrNull()?.id
+            }
+            prevVehicleCount = vehicles.size
+        }
     }
+
+    val selectedVehicleId = userSelectedVehicleId
+        ?: activeItem?.vehicleId
+        ?: vehicles.firstOrNull()?.id
 
     val parsedCandidate = remember(groupItems, activeItem) {
         if (groupItems.size > 1) {
@@ -382,12 +400,26 @@ fun ReviewDetailScreen(
                     Spacer(modifier = Modifier.height(12.dp))
 
                     if (vehicles.isEmpty()) {
-                        Text(
-                            text = "No vehicles available. Please add a vehicle first.",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = Color(0xFFC62828),
-                            fontWeight = FontWeight.Medium
-                        )
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "No vehicles available.",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = Color(0xFFC62828),
+                                fontWeight = FontWeight.Medium
+                            )
+                            Button(
+                                onClick = { navController.navigate(Screen.AddVehicle.route) },
+                                shape = RoundedCornerShape(8.dp)
+                            ) {
+                                Icon(Icons.Filled.Add, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("Add Vehicle")
+                            }
+                        }
                     } else {
                         var dropdownExpanded by remember { mutableStateOf(false) }
                         val selectedVehicle = vehicles.find { it.id == selectedVehicleId }
@@ -419,11 +451,34 @@ fun ReviewDetailScreen(
                                     DropdownMenuItem(
                                         text = { Text("${vehicle.year} ${vehicle.make} ${vehicle.model} (${vehicle.licensePlate ?: "No Plate"})") },
                                         onClick = {
-                                            selectedVehicleId = vehicle.id
+                                            userSelectedVehicleId = vehicle.id
                                             dropdownExpanded = false
                                         }
                                     )
                                 }
+                                HorizontalDivider()
+                                DropdownMenuItem(
+                                    text = {
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Icon(
+                                                imageVector = Icons.Filled.Add,
+                                                contentDescription = null,
+                                                tint = MaterialTheme.colorScheme.primary,
+                                                modifier = Modifier.size(18.dp)
+                                            )
+                                            Spacer(modifier = Modifier.width(8.dp))
+                                            Text(
+                                                text = "+ Add New Vehicle",
+                                                color = MaterialTheme.colorScheme.primary,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                        }
+                                    },
+                                    onClick = {
+                                        dropdownExpanded = false
+                                        navController.navigate(Screen.AddVehicle.route)
+                                    }
+                                )
                             }
                         }
                     }
