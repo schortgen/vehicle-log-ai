@@ -399,54 +399,33 @@ fun ReviewDetailScreen(
                     )
                     Spacer(modifier = Modifier.height(12.dp))
 
-                    if (vehicles.isEmpty()) {
-                        Row(
+                    var dropdownExpanded by remember { mutableStateOf(false) }
+                    val selectedVehicle = vehicles.find { it.id == selectedVehicleId }
+
+                    Box(modifier = Modifier.fillMaxWidth()) {
+                        OutlinedButton(
+                            onClick = { dropdownExpanded = true },
                             modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
+                            shape = RoundedCornerShape(8.dp)
                         ) {
-                            Text(
-                                text = "No vehicles available.",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = Color(0xFFC62828),
-                                fontWeight = FontWeight.Medium
-                            )
-                            Button(
-                                onClick = { navController.navigate(Screen.AddVehicle.route) },
-                                shape = RoundedCornerShape(8.dp)
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Icon(Icons.Filled.Add, contentDescription = null, modifier = Modifier.size(16.dp))
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text("Add Vehicle")
+                                Text(
+                                    text = selectedVehicle?.let { "${it.year} ${it.make} ${it.model} (${it.licensePlate ?: "No Plate"})" }
+                                        ?: "Select a vehicle",
+                                    style = MaterialTheme.typography.bodyMedium
+                                )
+                                Icon(Icons.Filled.ArrowDropDown, contentDescription = "Select vehicle")
                             }
                         }
-                    } else {
-                        var dropdownExpanded by remember { mutableStateOf(false) }
-                        val selectedVehicle = vehicles.find { it.id == selectedVehicleId }
-
-                        Box(modifier = Modifier.fillMaxWidth()) {
-                            OutlinedButton(
-                                onClick = { dropdownExpanded = true },
-                                modifier = Modifier.fillMaxWidth(),
-                                shape = RoundedCornerShape(8.dp)
-                            ) {
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Text(
-                                        text = selectedVehicle?.let { "${it.year} ${it.make} ${it.model} (${it.licensePlate ?: "No Plate"})" }
-                                            ?: "Select a vehicle",
-                                        style = MaterialTheme.typography.bodyMedium
-                                    )
-                                    Icon(Icons.Filled.ArrowDropDown, contentDescription = "Select vehicle")
-                                }
-                            }
-                            DropdownMenu(
-                                expanded = dropdownExpanded,
-                                onDismissRequest = { dropdownExpanded = false }
-                            ) {
+                        DropdownMenu(
+                            expanded = dropdownExpanded,
+                            onDismissRequest = { dropdownExpanded = false }
+                        ) {
+                            if (vehicles.isNotEmpty()) {
                                 vehicles.forEach { vehicle ->
                                     DropdownMenuItem(
                                         text = { Text("${vehicle.year} ${vehicle.make} ${vehicle.model} (${vehicle.licensePlate ?: "No Plate"})") },
@@ -457,29 +436,29 @@ fun ReviewDetailScreen(
                                     )
                                 }
                                 HorizontalDivider()
-                                DropdownMenuItem(
-                                    text = {
-                                        Row(verticalAlignment = Alignment.CenterVertically) {
-                                            Icon(
-                                                imageVector = Icons.Filled.Add,
-                                                contentDescription = null,
-                                                tint = MaterialTheme.colorScheme.primary,
-                                                modifier = Modifier.size(18.dp)
-                                            )
-                                            Spacer(modifier = Modifier.width(8.dp))
-                                            Text(
-                                                text = "+ Add New Vehicle",
-                                                color = MaterialTheme.colorScheme.primary,
-                                                fontWeight = FontWeight.Bold
-                                            )
-                                        }
-                                    },
-                                    onClick = {
-                                        dropdownExpanded = false
-                                        navController.navigate(Screen.AddVehicle.route)
-                                    }
-                                )
                             }
+                            DropdownMenuItem(
+                                text = {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Icon(
+                                            imageVector = Icons.Filled.Add,
+                                            contentDescription = null,
+                                            tint = MaterialTheme.colorScheme.primary,
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        Text(
+                                            text = "+ Add New Vehicle",
+                                            color = MaterialTheme.colorScheme.primary,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                    }
+                                },
+                                onClick = {
+                                    dropdownExpanded = false
+                                    navController.navigate(Screen.AddVehicle.route)
+                                }
+                            )
                         }
                     }
                 }
