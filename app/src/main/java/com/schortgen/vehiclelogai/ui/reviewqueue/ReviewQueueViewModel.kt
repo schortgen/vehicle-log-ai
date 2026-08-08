@@ -142,6 +142,12 @@ class ReviewQueueViewModel(
         }
     }
 
+    init {
+        viewModelScope.launch {
+            reviewItemRepository.cleanupDuplicates()
+        }
+    }
+
     fun deleteGroup(event: Event, items: List<ReviewItem>) {
         viewModelScope.launch {
             eventRepository?.deleteEvent(event)
@@ -151,12 +157,24 @@ class ReviewQueueViewModel(
 
     fun insertItem(item: ReviewItem) {
         viewModelScope.launch {
-            val id = reviewItemRepository.insertReviewItem(item)
-            if (item.ocrText.isNullOrBlank()) {
-                processOcr(id)
-            }
-            runEventGrouping()
+            insertItemAndReturnNew(item)
         }
+    }
+
+    suspend fun insertItemAndReturnNew(item: ReviewItem): Boolean {
+        val path = item.photoPath
+        if (!path.isNullOrBlank()) {
+            val existing = reviewItemRepository.getByPhotoPath(path)
+            if (existing != null) {
+                return false
+            }
+        }
+        val id = reviewItemRepository.insertReviewItem(item)
+        if (item.ocrText.isNullOrBlank()) {
+            processOcr(id)
+        }
+        runEventGrouping()
+        return true
     }
 
     fun removeFromGroup(item: ReviewItem) {

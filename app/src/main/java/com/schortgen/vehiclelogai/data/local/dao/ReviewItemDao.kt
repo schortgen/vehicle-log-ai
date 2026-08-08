@@ -22,6 +22,9 @@ interface ReviewItemDao {
     @Delete
     suspend fun delete(reviewItem: ReviewItem)
 
+    @Query("SELECT * FROM review_items WHERE photoPath = :photoPath LIMIT 1")
+    suspend fun getByPhotoPath(photoPath: String): ReviewItem?
+
     @Query("SELECT * FROM review_items WHERE id = :id")
     suspend fun getById(id: Long): ReviewItem?
 

@@ -30,15 +30,12 @@ fun ScanPhotosScreen(
     reviewQueueViewModel: ReviewQueueViewModel,
     viewModel: ScanPhotosViewModel = viewModel(
         factory = ScanViewModelFactory(LocalContext.current) { uri, dateTaken ->
-            // Create a lightweight ReviewItem and hand off to the review queue VM.
-            // insertItem launches on the ReviewQueueViewModel scope so this can be called from any dispatcher.
-            reviewQueueViewModel.insertItem(
+            reviewQueueViewModel.insertItemAndReturnNew(
                 ReviewItem(
                     photoPath = uri.toString(),
                     captureDate = dateTaken
                 )
             )
-            true
         }
     )
 ) {

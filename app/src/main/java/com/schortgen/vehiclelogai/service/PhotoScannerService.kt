@@ -78,8 +78,18 @@ class PhotoScannerService(
             var skippedVehicleRelated = 0
 
             for (candidate in candidates) {
-                if (photoScannerRepository.isAlreadyImported(candidate.mediaStoreId)) {
+                if (photoScannerRepository.isAlreadyImported(candidate.mediaStoreId) ||
+                    reviewItemRepository.getByPhotoPath(candidate.uri) != null
+                ) {
                     skippedAlreadyImported++
+                    photoScannerRepository.markAsImported(
+                        ScannedPhoto(
+                            mediaStoreId = candidate.mediaStoreId,
+                            uri = candidate.uri,
+                            displayName = candidate.displayName,
+                            dateTaken = candidate.dateTaken
+                        )
+                    )
                     DiagnosticLogger.d("Scanner", "skip already imported id=${candidate.mediaStoreId} name=${candidate.displayName}")
                     continue
                 }
