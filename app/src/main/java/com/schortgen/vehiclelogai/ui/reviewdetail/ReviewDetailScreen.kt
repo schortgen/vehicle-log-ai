@@ -127,13 +127,29 @@ fun ReviewDetailScreen(
         }
     }
 
-    var stationName by remember(parsedCandidate) { mutableStateOf(parsedCandidate?.stationName ?: "") }
-    var purchaseDate by remember(parsedCandidate) { mutableStateOf(parsedCandidate?.purchaseDate ?: "") }
-    var gallons by remember(parsedCandidate) { mutableStateOf(parsedCandidate?.gallons?.toString() ?: "") }
-    var pricePerGallon by remember(parsedCandidate) { mutableStateOf(parsedCandidate?.pricePerGallon?.toString() ?: "") }
-    var totalCost by remember(parsedCandidate) { mutableStateOf(parsedCandidate?.totalCost?.toString() ?: "") }
-    var odometer by remember(parsedCandidate) { mutableStateOf(parsedCandidate?.odometer?.toString() ?: "") }
-    var tripDistance by remember(parsedCandidate) { mutableStateOf(parsedCandidate?.tripDistance?.toString() ?: "") }
+    val initialStationName = remember(parsedCandidate) { parsedCandidate?.stationName ?: "" }
+    val initialPurchaseDate = remember(parsedCandidate) { parsedCandidate?.purchaseDate ?: "" }
+    val initialGallons = remember(parsedCandidate) { parsedCandidate?.gallons?.toString() ?: "" }
+    val initialPricePerGallon = remember(parsedCandidate) { parsedCandidate?.pricePerGallon?.toString() ?: "" }
+    val initialTotalCost = remember(parsedCandidate) { parsedCandidate?.totalCost?.toString() ?: "" }
+    val initialOdometer = remember(parsedCandidate) { parsedCandidate?.odometer?.toString() ?: "" }
+    val initialTripDistance = remember(parsedCandidate) { parsedCandidate?.tripDistance?.toString() ?: "" }
+
+    var stationName by remember(parsedCandidate) { mutableStateOf(initialStationName) }
+    var purchaseDate by remember(parsedCandidate) { mutableStateOf(initialPurchaseDate) }
+    var gallons by remember(parsedCandidate) { mutableStateOf(initialGallons) }
+    var pricePerGallon by remember(parsedCandidate) { mutableStateOf(initialPricePerGallon) }
+    var totalCost by remember(parsedCandidate) { mutableStateOf(initialTotalCost) }
+    var odometer by remember(parsedCandidate) { mutableStateOf(initialOdometer) }
+    var tripDistance by remember(parsedCandidate) { mutableStateOf(initialTripDistance) }
+
+    var isStationNameEdited by remember(parsedCandidate) { mutableStateOf(false) }
+    var isPurchaseDateEdited by remember(parsedCandidate) { mutableStateOf(false) }
+    var isGallonsEdited by remember(parsedCandidate) { mutableStateOf(false) }
+    var isPricePerGallonEdited by remember(parsedCandidate) { mutableStateOf(false) }
+    var isTotalCostEdited by remember(parsedCandidate) { mutableStateOf(false) }
+    var isOdometerEdited by remember(parsedCandidate) { mutableStateOf(false) }
+    var isTripDistanceEdited by remember(parsedCandidate) { mutableStateOf(false) }
 
     var showImageDialog by remember { mutableStateOf(false) }
     var dialogImageUri by remember { mutableStateOf<String?>(null) }
@@ -455,50 +471,78 @@ fun ReviewDetailScreen(
                     SuggestedValueField(
                         label = "Station Name",
                         value = stationName,
-                        onValueChange = { stationName = it },
-                        detected = parsedCandidate?.stationName != null
+                        onValueChange = {
+                            stationName = it
+                            isStationNameEdited = (it != initialStationName)
+                        },
+                        detected = parsedCandidate?.stationName != null,
+                        isEdited = isStationNameEdited
                     )
 
                     SuggestedValueField(
                         label = "Purchase Date",
                         value = purchaseDate,
-                        onValueChange = { purchaseDate = it },
-                        detected = parsedCandidate?.purchaseDate != null
+                        onValueChange = {
+                            purchaseDate = it
+                            isPurchaseDateEdited = (it != initialPurchaseDate)
+                        },
+                        detected = parsedCandidate?.purchaseDate != null,
+                        isEdited = isPurchaseDateEdited
                     )
 
                     SuggestedValueField(
                         label = "Gallons",
                         value = gallons,
-                        onValueChange = { gallons = it },
-                        detected = parsedCandidate?.gallons != null
+                        onValueChange = {
+                            gallons = it
+                            isGallonsEdited = (it != initialGallons)
+                        },
+                        detected = parsedCandidate?.gallons != null,
+                        isEdited = isGallonsEdited
                     )
 
                     SuggestedValueField(
                         label = "Price Per Gallon",
                         value = pricePerGallon,
-                        onValueChange = { pricePerGallon = it },
-                        detected = parsedCandidate?.pricePerGallon != null
+                        onValueChange = {
+                            pricePerGallon = it
+                            isPricePerGallonEdited = (it != initialPricePerGallon)
+                        },
+                        detected = parsedCandidate?.pricePerGallon != null,
+                        isEdited = isPricePerGallonEdited
                     )
 
                     SuggestedValueField(
                         label = "Total Cost",
                         value = totalCost,
-                        onValueChange = { totalCost = it },
-                        detected = parsedCandidate?.totalCost != null
+                        onValueChange = {
+                            totalCost = it
+                            isTotalCostEdited = (it != initialTotalCost)
+                        },
+                        detected = parsedCandidate?.totalCost != null,
+                        isEdited = isTotalCostEdited
                     )
 
                     SuggestedValueField(
                         label = "Odometer",
                         value = odometer,
-                        onValueChange = { odometer = it },
-                        detected = parsedCandidate?.odometer != null
+                        onValueChange = {
+                            odometer = it
+                            isOdometerEdited = (it != initialOdometer)
+                        },
+                        detected = parsedCandidate?.odometer != null,
+                        isEdited = isOdometerEdited
                     )
 
                     SuggestedValueField(
                         label = "Trip Distance",
                         value = tripDistance,
-                        onValueChange = { tripDistance = it },
-                        detected = parsedCandidate?.tripDistance != null
+                        onValueChange = {
+                            tripDistance = it
+                            isTripDistanceEdited = (it != initialTripDistance)
+                        },
+                        detected = parsedCandidate?.tripDistance != null,
+                        isEdited = isTripDistanceEdited
                     )
                 }
             }
@@ -573,6 +617,15 @@ fun ReviewDetailScreen(
                                     odometer = odometer.toIntOrNull(),
                                     tripDistance = tripDistance.toDoubleOrNull()
                                 )
+
+                                if (isStationNameEdited) DiagnosticLogger.i("AILearning", "User edited stationName: AI detected='${parsedCandidate?.stationName}' -> User edited='$stationName'")
+                                if (isPurchaseDateEdited) DiagnosticLogger.i("AILearning", "User edited purchaseDate: AI detected='${parsedCandidate?.purchaseDate}' -> User edited='$purchaseDate'")
+                                if (isGallonsEdited) DiagnosticLogger.i("AILearning", "User edited gallons: AI detected='${parsedCandidate?.gallons}' -> User edited='$gallons'")
+                                if (isPricePerGallonEdited) DiagnosticLogger.i("AILearning", "User edited pricePerGallon: AI detected='${parsedCandidate?.pricePerGallon}' -> User edited='$pricePerGallon'")
+                                if (isTotalCostEdited) DiagnosticLogger.i("AILearning", "User edited totalCost: AI detected='${parsedCandidate?.totalCost}' -> User edited='$totalCost'")
+                                if (isOdometerEdited) DiagnosticLogger.i("AILearning", "User edited odometer: AI detected='${parsedCandidate?.odometer}' -> User edited='$odometer'")
+                                if (isTripDistanceEdited) DiagnosticLogger.i("AILearning", "User edited tripDistance: AI detected='${parsedCandidate?.tripDistance}' -> User edited='$tripDistance'")
+
                                 if (targetEventId != null && targetEventId > 0L) {
                                     reviewQueueViewModel.saveGroupedAsFuelEvent(targetEventId, vehId, candidate)
                                 } else {
@@ -876,7 +929,8 @@ private fun SuggestedValueField(
     label: String,
     value: String,
     onValueChange: (String) -> Unit,
-    detected: Boolean
+    detected: Boolean,
+    isEdited: Boolean = false
 ) {
     Column(modifier = Modifier.fillMaxWidth()) {
         Box(
@@ -891,24 +945,42 @@ private fun SuggestedValueField(
                 singleLine = true
             )
 
+            val badgeText = when {
+                isEdited -> "User edit"
+                detected -> "Detected"
+                else -> "Not found"
+            }
+
+            val badgeBgColor = when {
+                isEdited -> Color(0xFFE3F2FD)
+                detected -> Color(0xFFE8F5E9)
+                else -> Color(0xFFFCE4EC)
+            }
+
+            val badgeTextColor = when {
+                isEdited -> Color(0xFF1565C0)
+                detected -> Color(0xFF2E7D32)
+                else -> Color(0xFFC62828)
+            }
+
             Surface(
                 modifier = Modifier
                     .align(Alignment.TopEnd)
                     .padding(top = 8.dp, end = 12.dp),
                 shape = RoundedCornerShape(12.dp),
-                color = if (detected) Color(0xFFE8F5E9) else Color(0xFFFCE4EC)
+                color = badgeBgColor
             ) {
                 Text(
-                    text = if (detected) "Detected" else "Not found",
+                    text = badgeText,
                     style = MaterialTheme.typography.labelSmall,
-                    color = if (detected) Color(0xFF2E7D32) else Color(0xFFC62828),
+                    color = badgeTextColor,
                     fontWeight = FontWeight.Bold,
                     modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
                 )
             }
         }
 
-        if (!detected) {
+        if (!detected && !isEdited) {
             Text(
                 text = "Not detected",
                 style = MaterialTheme.typography.bodySmall,
