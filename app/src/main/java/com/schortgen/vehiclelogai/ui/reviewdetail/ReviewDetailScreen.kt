@@ -11,6 +11,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
@@ -673,11 +674,13 @@ fun ReviewDetailScreen(
                     Spacer(modifier = Modifier.height(12.dp))
 
                     if (!activeItem?.ocrText.isNullOrBlank()) {
-                        Text(
-                            text = activeItem?.ocrText.orEmpty(),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
+                        SelectionContainer {
+                            Text(
+                                text = activeItem?.ocrText.orEmpty(),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                        }
                     } else {
                         Text(
                             text = "No OCR data yet. Tap \"Re-extract Data\" to process this photo.",
