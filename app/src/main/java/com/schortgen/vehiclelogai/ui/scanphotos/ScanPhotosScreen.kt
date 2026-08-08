@@ -29,13 +29,13 @@ fun ScanPhotosScreen(
     navController: NavController,
     reviewQueueViewModel: ReviewQueueViewModel,
     viewModel: ScanPhotosViewModel = viewModel(
-        factory = ScanViewModelFactory(LocalContext.current) { uri ->
+        factory = ScanViewModelFactory(LocalContext.current) { uri, dateTaken ->
             // Create a lightweight ReviewItem and hand off to the review queue VM.
             // insertItem launches on the ReviewQueueViewModel scope so this can be called from any dispatcher.
             reviewQueueViewModel.insertItem(
                 ReviewItem(
                     photoPath = uri.toString(),
-                    captureDate = System.currentTimeMillis()
+                    captureDate = dateTaken
                 )
             )
             true

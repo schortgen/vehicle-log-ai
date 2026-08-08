@@ -26,5 +26,6 @@ data class ScannedPhoto(
     val uri: String,
     val displayName: String,
     val importedDate: Long = System.currentTimeMillis(),
-    val eventId: Long? = null
+    val eventId: Long? = null,
+    val dateTaken: Long = System.currentTimeMillis()
 )

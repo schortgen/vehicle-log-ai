@@ -17,7 +17,7 @@ import kotlinx.coroutines.withContext
  */
 class ScanViewModelFactory(
     private val context: Context,
-    private val addToQueueLambda: suspend (Uri) -> Boolean = { _ ->
+    private val addToQueueLambda: suspend (Uri, Long) -> Boolean = { _, _ ->
         // Default stub implementation: mark all items as queued. Replace this
         // by passing a real lambda that enqueues to your ReviewQueue.
         withContext(Dispatchers.IO) { true }

@@ -28,13 +28,13 @@ interface ReviewItemDao {
     @Query("SELECT * FROM review_items")
     suspend fun getAll(): List<ReviewItem>
 
-    @Query("SELECT * FROM review_items ORDER BY createdDate ASC")
+    @Query("SELECT * FROM review_items ORDER BY captureDate DESC")
     fun observeAll(): Flow<List<ReviewItem>>
 
-    @Query("SELECT * FROM review_items WHERE status = :status ORDER BY createdDate ASC")
+    @Query("SELECT * FROM review_items WHERE status = :status ORDER BY captureDate DESC")
     fun observeByStatus(status: String): Flow<List<ReviewItem>>
 
-    @Query("SELECT * FROM review_items WHERE vehicleId = :vehicleId ORDER BY createdDate DESC")
+    @Query("SELECT * FROM review_items WHERE vehicleId = :vehicleId ORDER BY captureDate DESC")
     fun observeByVehicle(vehicleId: Long): Flow<List<ReviewItem>>
 
     @Query("SELECT COUNT(*) FROM review_items WHERE status = 'PENDING'")

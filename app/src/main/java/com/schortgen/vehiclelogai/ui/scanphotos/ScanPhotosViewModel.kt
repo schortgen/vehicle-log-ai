@@ -13,7 +13,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import java.util.*
 
 class ScanPhotosViewModel(
-    private val addToReviewQueue: suspend (Uri) -> Boolean // provide your queue function here
+    private val addToReviewQueue: suspend (Uri, Long) -> Boolean // provide your queue function here
 ) : ViewModel() {
 
     private val _startDateMillis = MutableStateFlow<Long?>(null)
@@ -110,11 +110,12 @@ class ScanPhotosViewModel(
                     projection,
                     if (selectionBuilder.isNotEmpty()) selectionBuilder.toString() else null,
                     if (selectionArgs.isNotEmpty()) selectionArgs.toTypedArray() else null,
-                    "${MediaStore.Images.Media.DATE_TAKEN} ASC"
+                    "${MediaStore.Images.Media.DATE_TAKEN} DESC"
                 )?.use { cursor ->
                     val idIndex = cursor.getColumnIndexOrThrow(MediaStore.Images.Media._ID)
                     val nameIndex = cursor.getColumnIndex(MediaStore.Images.Media.DISPLAY_NAME)
                     val bucketIndex = cursor.getColumnIndex(MediaStore.Images.Media.BUCKET_DISPLAY_NAME)
+                    val dateTakenIndex = cursor.getColumnIndex(MediaStore.Images.Media.DATE_TAKEN)
 
                     while (isActive && cursor.moveToNext()) {
                         _scannedCount.value = _scannedCount.value + 1
@@ -122,6 +123,7 @@ class ScanPhotosViewModel(
                         val id = cursor.getLong(idIndex)
                         val displayName = if (nameIndex >= 0) cursor.getString(nameIndex)?.lowercase() ?: "" else ""
                         val bucketName = if (bucketIndex >= 0) cursor.getString(bucketIndex)?.lowercase() ?: "" else ""
+                        val dateTaken = if (dateTakenIndex >= 0) cursor.getLong(dateTakenIndex) else System.currentTimeMillis()
 
                         if (nonVehicleKeywords.any { displayName.contains(it) || bucketName.contains(it) }) {
                             // Skip non-vehicle photo
@@ -132,7 +134,7 @@ class ScanPhotosViewModel(
                         try {
                             // Attempt to add to review queue. The addToReviewQueue should return true if enqueued.
                             val added = try {
-                                addToReviewQueue(contentUri)
+                                addToReviewQueue(contentUri, dateTaken)
                             } catch (t: Throwable) {
                                 // log and treat as not added
                                 false

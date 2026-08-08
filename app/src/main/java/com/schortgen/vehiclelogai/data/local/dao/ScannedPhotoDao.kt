@@ -21,12 +21,12 @@ interface ScannedPhotoDao {
     @Query("SELECT COUNT(*) FROM scanned_photos")
     suspend fun count(): Int
 
-    @Query("SELECT * FROM scanned_photos WHERE eventId = :eventId ORDER BY importedDate ASC")
+    @Query("SELECT * FROM scanned_photos WHERE eventId = :eventId ORDER BY dateTaken ASC")
     suspend fun getByEventId(eventId: Long): List<ScannedPhoto>
 
-    @Query("SELECT * FROM scanned_photos WHERE eventId IS NULL ORDER BY importedDate ASC")
+    @Query("SELECT * FROM scanned_photos WHERE eventId IS NULL ORDER BY dateTaken DESC")
     suspend fun getUngroupedScannedPhotos(): List<ScannedPhoto>
 
-    @Query("SELECT * FROM scanned_photos WHERE eventId = :eventId ORDER BY importedDate ASC")
+    @Query("SELECT * FROM scanned_photos WHERE eventId = :eventId ORDER BY dateTaken ASC")
     fun observeByEvent(eventId: Long): Flow<List<ScannedPhoto>>
 }

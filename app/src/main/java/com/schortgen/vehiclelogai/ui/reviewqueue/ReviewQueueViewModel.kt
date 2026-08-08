@@ -269,7 +269,7 @@ class ReviewQueueViewModel(
 
                 val newItem = ReviewItem(
                     photoPath = photoPathUri,
-                    captureDate = System.currentTimeMillis(),
+                    captureDate = targetItem?.captureDate ?: System.currentTimeMillis(),
                     eventId = eventId,
                     status = ProcessingStatus.PENDING,
                     reason = "Added photo"

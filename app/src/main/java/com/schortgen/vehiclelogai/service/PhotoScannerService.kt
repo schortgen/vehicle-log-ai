@@ -133,7 +133,8 @@ class PhotoScannerService(
                     ScannedPhoto(
                         mediaStoreId = candidate.mediaStoreId,
                         uri = candidate.uri,
-                        displayName = candidate.displayName
+                        displayName = candidate.displayName,
+                        dateTaken = candidate.dateTaken
                     )
                 )
                 importedCount++
