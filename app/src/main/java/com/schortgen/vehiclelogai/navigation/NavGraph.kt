@@ -174,5 +174,13 @@ fun NavGraph(navController: NavHostController) {
             val vehicleId = backStackEntry.arguments?.getLong("vehicleId") ?: -1L
             EditVehicleScreen(navController, vehicleViewModel, eventViewModel, vehicleId)
         }
+
+        composable(
+            route = Screen.EventDetail.route,
+            arguments = listOf(navArgument("eventId") { type = NavType.LongType })
+        ) { backStackEntry ->
+            val eventId = backStackEntry.arguments?.getLong("eventId") ?: -1L
+            EventDetailScreen(navController, eventViewModel, eventId)
+        }
     }
 }
