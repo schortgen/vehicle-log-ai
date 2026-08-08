@@ -145,7 +145,6 @@ class MlKitOcrService(private val context: Context) {
             val right: Int,
             val bottom: Int
         ) {
-            val centerY: Double = (top + bottom) / 2.0
             val height: Int = (bottom - top).coerceAtLeast(1)
         }
 
@@ -174,18 +173,24 @@ class MlKitOcrService(private val context: Context) {
             return visionText.text
         }
 
-        // Sort chunks vertically first to process top-to-bottom
-        chunks.sortBy { it.centerY }
+        // Sort chunks strictly top-to-bottom by top Y coordinate
+        val sortedChunks = chunks.sortedBy { it.top }
 
-        // Group chunks into visual horizontal lines
+        // Group chunks into visual horizontal lines using vertical bounding box overlap
         val visualLines = mutableListOf<MutableList<TextChunk>>()
-        for (chunk in chunks) {
+        for (chunk in sortedChunks) {
             var placed = false
             for (line in visualLines) {
-                val avgCenterY = line.map { it.centerY }.average()
-                val avgHeight = line.map { it.height }.average()
-                val threshold = (avgHeight * 0.55).coerceAtLeast(12.0)
-                if (kotlin.math.abs(chunk.centerY - avgCenterY) <= threshold) {
+                val lineTop = line.minOf { it.top }
+                val lineBottom = line.maxOf { it.bottom }
+                val lineMinHeight = line.minOf { it.height }
+
+                val overlapTop = maxOf(chunk.top, lineTop)
+                val overlapBottom = minOf(chunk.bottom, lineBottom)
+                val overlapHeight = (overlapBottom - overlapTop).coerceAtLeast(0)
+
+                val minHeight = minOf(chunk.height, lineMinHeight)
+                if (overlapHeight >= minHeight * 0.35) {
                     line.add(chunk)
                     placed = true
                     break
@@ -196,8 +201,8 @@ class MlKitOcrService(private val context: Context) {
             }
         }
 
-        // Sort lines top-to-bottom by average centerY
-        visualLines.sortBy { line -> line.map { it.centerY }.average() }
+        // Sort lines top-to-bottom by average top coordinate
+        visualLines.sortBy { line -> line.map { it.top }.average() }
 
         // For each line, sort chunks left-to-right by left coordinate and join with spaces
         val resultLines = visualLines.map { line ->

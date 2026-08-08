@@ -479,17 +479,20 @@ class ReceiptParserService {
         val candidates = mutableListOf<Pair<Int, Float>>()
 
         // Normalize text line for OCR character confusion in numeric contexts (e.g., "12345O" -> "123450")
+        // and clean gear shift indicators
         val sanitizedText = text
             .replace(Regex("""(\b\d{4,6})[Oo]\b"""), "$10")
             .replace(Regex("""\b[Oo](\d{4,6}\b)"""), "0$1")
+            .replace(Regex("""\bP\s*R\s*N\s*D\s*[321L]?\b""", RegexOption.IGNORE_CASE), "")
+            .replace(Regex("""\bPRND[321L]?\b""", RegexOption.IGNORE_CASE), "")
 
         // Pattern 1: Number followed by unit or keyword (e.g. "124,567 mi", "124567.8 mi", "124567 miles", "124567 odo", "124567 km")
         val numKeyPattern = Regex("""\b([\d,]{4,7}(?:\.\d)?)\s*(?:mi|miles|km|odo|odometer)\b""", RegexOption.IGNORE_CASE)
         numKeyPattern.findAll(sanitizedText).forEach { match ->
-            val lineStart = (match.range.first - 20).coerceAtLeast(0)
-            val lineEnd = (match.range.last + 20).coerceAtMost(sanitizedText.length)
+            val lineStart = (match.range.first - 25).coerceAtLeast(0)
+            val lineEnd = (match.range.last + 25).coerceAtMost(sanitizedText.length)
             val context = sanitizedText.substring(lineStart, lineEnd).lowercase()
-            if (!context.contains("trip") && !context.contains("gal") && !context.contains("$")) {
+            if (!context.contains("trip") && !context.contains("dist") && !context.contains("gal") && !context.contains("$")) {
                 val raw = match.groupValues[1].replace(",", "")
                 val doubleVal = raw.toDoubleOrNull()
                 val value = doubleVal?.toInt()
@@ -535,14 +538,15 @@ class ReceiptParserService {
         }
 
         // Pattern 4: Fallback standalone 5-6 digit integer (e.g., on dashboard photo)
-        // Must strictly filter out US zip codes, phone numbers, store numbers, addresses, dates, timestamps
+        // Must strictly filter out US zip codes, phone numbers, store numbers, addresses, dates, timestamps, AND trip numbers
         val standalonePattern = Regex("""\b(\d{5,6})\b""")
         standalonePattern.findAll(sanitizedText).forEach { match ->
-            val lineStart = (match.range.first - 30).coerceAtLeast(0)
-            val lineEnd = (match.range.last + 30).coerceAtMost(sanitizedText.length)
+            val lineStart = (match.range.first - 40).coerceAtLeast(0)
+            val lineEnd = (match.range.last + 40).coerceAtMost(sanitizedText.length)
             val context = sanitizedText.substring(lineStart, lineEnd).lowercase()
 
-            val isMetadata = context.contains("$") || context.contains("trip") || context.contains("tel") ||
+            val isTripContext = context.contains("trip") || context.contains("dist")
+            val isMetadata = context.contains("$") || isTripContext || context.contains("tel") ||
                     context.contains("phone") || context.contains("fax") || context.contains("store") ||
                     context.contains("pump") || context.contains("st#") || context.contains("trans") ||
                     context.contains("auth") || context.contains("card") || context.contains("date") ||
@@ -600,40 +604,45 @@ class ReceiptParserService {
             }
         }
 
-        // Pattern 1: Explicit trip keyword + number (e.g. "trip 254.3", "trip a 120.5", "trip b 45", "trip dist: 310.2", "dist 45.1")
+        // Pattern 1: Explicit trip keyword + number on same line (e.g. "trip 254.3", "trip a 120.5", "trip b 45", "trip dist: 310.2")
         val tripPattern = Regex("""\b(?:trip\s*[ab12]?|dist|distance|trip\s*dist|trip\s*miles)\s*[:=]?\s*(\d+(?:\.\d{1,2})?)\b""", RegexOption.IGNORE_CASE)
         tripPattern.findAll(sanitizedText).forEach { match ->
             val value = match.groupValues[1].toDoubleOrNull()
             if (value != null && value > 0.0 && value < 9999.0) {
-                // Ensure it's not confusing with gallons or total cost
                 val matchesGallons = gallons != null && kotlin.math.abs(value - gallons) < 0.05
                 val matchesTotal = totalCost != null && kotlin.math.abs(value - totalCost) < 0.05
                 if (!matchesGallons && !matchesTotal) {
-                    candidates.add(Pair(value, 0.90f))
+                    candidates.add(Pair(value, 0.95f))
                 }
             }
         }
 
-        // Pattern 2: Multi-line trip check (e.g., Line 1: "TRIP A", Line 2: "245.3")
+        // Pattern 2: Multi-line trip check (e.g., Line 1: "TRIP A:", Line 2: "412.6 MI")
         for (i in lines.indices) {
             val lineLower = lines[i].lowercase()
             if (lineLower.contains("trip") || lineLower.contains("dist")) {
                 val neighborLines = listOfNotNull(
-                    lines[i],
                     lines.getOrNull(i + 1),
-                    lines.getOrNull(i - 1)
+                    lines.getOrNull(i - 1),
+                    lines[i]
                 )
                 for (nLine in neighborLines) {
                     val nLower = nLine.lowercase()
                     if (!nLower.contains("odometer") && !nLower.contains("odo ")) {
-                        val numMatch = Regex("""\b(\d+(?:\.\d{1,2})?)\b""").find(nLine)
-                        if (numMatch != null) {
-                            val value = numMatch.groupValues[1].toDoubleOrNull()
-                            if (value != null && value > 0.0 && value < 9999.0) {
-                                val matchesGallons = gallons != null && kotlin.math.abs(value - gallons) < 0.05
-                                val matchesTotal = totalCost != null && kotlin.math.abs(value - totalCost) < 0.05
-                                if (!matchesGallons && !matchesTotal) {
-                                    candidates.add(Pair(value, 0.85f))
+                        val numMatches = Regex("""\b(\d+(?:\.\d{1,2})?)\b""").findAll(nLine)
+                        for (numMatch in numMatches) {
+                            var value = numMatch.groupValues[1].toDoubleOrNull()
+                            if (value != null) {
+                                // Infer missing decimal point on dot matrix display if 4 or 5 digits without decimal (e.g. 45824 -> 4582.4 or 4126 -> 412.6)
+                                if (value in 1000.0..99999.0 && !numMatch.value.contains(".")) {
+                                    value /= 10.0
+                                }
+                                if (value > 0.0 && value < 9999.0) {
+                                    val matchesGallons = gallons != null && kotlin.math.abs(value - gallons) < 0.05
+                                    val matchesTotal = totalCost != null && kotlin.math.abs(value - totalCost) < 0.05
+                                    if (!matchesGallons && !matchesTotal) {
+                                        candidates.add(Pair(value, 0.92f))
+                                    }
                                 }
                             }
                         }
@@ -661,8 +670,8 @@ class ReceiptParserService {
         }
 
         if (candidates.isNotEmpty()) {
-            val best = candidates.maxByOrNull { it.second }
-            DiagnosticLogger.d("Parser", "Trip distance candidates: ${candidates.map { "${it.first}@${it.second}" }}")
+            val best = candidates.maxWithOrNull(compareBy({ it.second }, { it.first }))
+            DiagnosticLogger.d("Parser", "Trip candidates: ${candidates.map { "${it.first}@${it.second}" }}")
             return Pair(best!!.first, best.second)
         }
 
