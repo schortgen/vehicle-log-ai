@@ -12,15 +12,58 @@ import kotlinx.coroutines.withContext
  */
 class ReceiptParserService {
 
-    private val stationKeywords = listOf(
-        "shell", "exxon", "bp", "chevron", "mobil", "esso", "sunoco", "speedway",
-        "circle k", "7-eleven", "valero", "costco", "sam's club", "walmart",
-        "kroger", "pilot", "flying j", "love's", "ta", "petro", "marathon",
-        "citgo", "phillips 66", "conoco", "76", "arco", "sinclair", "hess",
-        "holiday", "kwik trip", "casey's", "murphy", "racetrac", "wawa",
-        "sheetz", "buc-ee's", "quiktrip", "cumberland farms", "getgo",
-        "texaco", "amoco", "gulf"
+    private val stationBrandMap = listOf(
+        Pair(Regex("""\bshell\b""", RegexOption.IGNORE_CASE), "Shell"),
+        Pair(Regex("""\bchevron\b""", RegexOption.IGNORE_CASE), "Chevron"),
+        Pair(Regex("""\bexxonmobil\b""", RegexOption.IGNORE_CASE), "ExxonMobil"),
+        Pair(Regex("""\bexxon\b""", RegexOption.IGNORE_CASE), "Exxon"),
+        Pair(Regex("""\bmobil\b""", RegexOption.IGNORE_CASE), "Mobil"),
+        Pair(Regex("""\b(bp|amoco)\b""", RegexOption.IGNORE_CASE), "BP"),
+        Pair(Regex("""\btexaco\b""", RegexOption.IGNORE_CASE), "Texaco"),
+        Pair(Regex("""\bmarathon\b""", RegexOption.IGNORE_CASE), "Marathon"),
+        Pair(Regex("""\bsunoco\b""", RegexOption.IGNORE_CASE), "Sunoco"),
+        Pair(Regex("""\bphillips\s*66\b""", RegexOption.IGNORE_CASE), "Phillips 66"),
+        Pair(Regex("""\bvalero\b""", RegexOption.IGNORE_CASE), "Valero"),
+        Pair(Regex("""\bcircle\s*k\b""", RegexOption.IGNORE_CASE), "Circle K"),
+        Pair(Regex("""\b(7-eleven|7\s*eleven|seven\s*eleven|711)\b""", RegexOption.IGNORE_CASE), "7-Eleven"),
+        Pair(Regex("""\bcostco\b""", RegexOption.IGNORE_CASE), "Costco"),
+        Pair(Regex("""\bsam'?s\s*club\b""", RegexOption.IGNORE_CASE), "Sam's Club"),
+        Pair(Regex("""\bbj'?s\b""", RegexOption.IGNORE_CASE), "BJ's Wholesale"),
+        Pair(Regex("""\bcasey'?s\b""", RegexOption.IGNORE_CASE), "Casey's"),
+        Pair(Regex("""\bkwik\s*(trip|star)\b""", RegexOption.IGNORE_CASE), "Kwik Trip"),
+        Pair(Regex("""\bsheetz\b""", RegexOption.IGNORE_CASE), "Sheetz"),
+        Pair(Regex("""\bwawa\b""", RegexOption.IGNORE_CASE), "Wawa"),
+        Pair(Regex("""\b(pilot|flying\s*j)\b""", RegexOption.IGNORE_CASE), "Pilot Flying J"),
+        Pair(Regex("""\blove'?s\b""", RegexOption.IGNORE_CASE), "Love's"),
+        Pair(Regex("""\bbuc-?ee'?s\b""", RegexOption.IGNORE_CASE), "Buc-ee's"),
+        Pair(Regex("""\bspeedway\b""", RegexOption.IGNORE_CASE), "Speedway"),
+        Pair(Regex("""\bcumberland\s*(farms)?\b""", RegexOption.IGNORE_CASE), "Cumberland Farms"),
+        Pair(Regex("""\barco\b""", RegexOption.IGNORE_CASE), "ARCO"),
+        Pair(Regex("""\bsinclair\b""", RegexOption.IGNORE_CASE), "Sinclair"),
+        Pair(Regex("""\bcitgo\b""", RegexOption.IGNORE_CASE), "CITGO"),
+        Pair(Regex("""\bmurphy\s*(usa|express)?\b""", RegexOption.IGNORE_CASE), "Murphy USA"),
+        Pair(Regex("""\bkum\s*(&|and)\s*go\b""", RegexOption.IGNORE_CASE), "Kum & Go"),
+        Pair(Regex("""\bquiktrip\b""", RegexOption.IGNORE_CASE), "QuikTrip"),
+        Pair(Regex("""\bmaveri?k\b""", RegexOption.IGNORE_CASE), "Maverik"),
+        Pair(Regex("""\bgulf\b""", RegexOption.IGNORE_CASE), "Gulf"),
+        Pair(Regex("""\b(racetrac|raceway)\b""", RegexOption.IGNORE_CASE), "RaceTrac"),
+        Pair(Regex("""\bthorntons?\b""", RegexOption.IGNORE_CASE), "Thorntons"),
+        Pair(Regex("""\bmapco\b""", RegexOption.IGNORE_CASE), "MAPCO"),
+        Pair(Regex("""\bgetgo\b""", RegexOption.IGNORE_CASE), "GetGo"),
+        Pair(Regex("""\bkroger\b""", RegexOption.IGNORE_CASE), "Kroger"),
+        Pair(Regex("""\bmeijer\b""", RegexOption.IGNORE_CASE), "Meijer"),
+        Pair(Regex("""\bsafeway\b""", RegexOption.IGNORE_CASE), "Safeway"),
+        Pair(Regex("""\bh-?e-?b\b""", RegexOption.IGNORE_CASE), "H-E-B"),
+        Pair(Regex("""\bhy-?vee\b""", RegexOption.IGNORE_CASE), "Hy-Vee"),
+        Pair(Regex("""\bgiant\s*eagle\b""", RegexOption.IGNORE_CASE), "Giant Eagle"),
+        Pair(Regex("""\bholiday\b""", RegexOption.IGNORE_CASE), "Holiday"),
+        Pair(Regex("""\broyal\s*farms\b""", RegexOption.IGNORE_CASE), "Royal Farms"),
+        Pair(Regex("""\birving\b""", RegexOption.IGNORE_CASE), "Irving Oil"),
+        Pair(Regex("""\bdash\s*in\b""", RegexOption.IGNORE_CASE), "Dash In"),
+        Pair(Regex("""\bstewart'?s\b""", RegexOption.IGNORE_CASE), "Stewart's")
     )
+
+    private val stationKeywords = stationBrandMap.map { it.second.lowercase() }
 
     private val datePatterns = listOf(
         Regex("""\b(\d{1,2})[/-](\d{1,2})[/-](\d{2,4})\b"""),
@@ -49,7 +92,7 @@ class ReceiptParserService {
             val pricePerGallonResult = fuelNumbersResult.pricePerGallon
             val totalCostResult = fuelNumbersResult.totalCost
             val odometerResult = extractOdometer(rawText)
-            val tripDistanceResult = extractTripDistance(rawText)
+            val tripDistanceResult = extractTripDistance(rawText, gallonsResult.first, totalCostResult.first)
 
             val missing = mutableListOf<String>()
             if (stationNameResult.first == null) missing.add("stationName")
@@ -114,27 +157,58 @@ class ReceiptParserService {
     }
 
     private fun extractStationName(lines: List<String>, fullText: String): Pair<String?, Float> {
-        val topLines = lines.take(8)
         val fullLower = fullText.lowercase()
-        for (keyword in stationKeywords) {
-            val index = fullLower.indexOf(keyword)
-            if (index != -1) {
-                val containingLine = topLines.firstOrNull { it.lowercase().contains(keyword) }
-                    ?: lines.firstOrNull { it.lowercase().contains(keyword) }
-                    ?: fullText.substring(index, (index + keyword.length + 30).coerceAtMost(fullText.length))
-                val cleaned = containingLine.trim().take(60)
-                return Pair(cleaned, 0.85f)
+        // OCR text normalization (e.g. "S H E L L" -> "shell", "C H E V R O N" -> "chevron")
+        val normalizedFull = fullLower
+            .replace(Regex("""\b([a-z])\s+([a-z])\s+([a-z])\s+([a-z])\b"""), "$1$2$3$4")
+            .replace(Regex("""\b([a-z])\s+([a-z])\s+([a-z])\b"""), "$1$2$3")
+
+        // 1. Direct Brand Match using Canonical Brand Dictionary
+        for ((regex, canonicalName) in stationBrandMap) {
+            if (regex.containsMatchIn(fullLower) || regex.containsMatchIn(normalizedFull)) {
+                return Pair(canonicalName, 0.95f)
             }
         }
+
+        // 2. Generic station indicator match in top 8 lines
+        val topLines = lines.take(8)
         val stationIndicatorPattern = Regex("""\b(?:station|gas|mart|express|store|market|service\s+station|fuel|clean|stop|plaza|inc|llc)\b""", RegexOption.IGNORE_CASE)
-        val excludePattern = Regex("""\b(?:receipt|welcome|date|time|phone|thank|mileage|odometer|trip|temp|°f|°c|mph|rpm|prnd)\b""", RegexOption.IGNORE_CASE)
+        val excludePattern = Regex("""\b(?:receipt|welcome|date|time|phone|thank|mileage|odometer|trip|temp|°f|°c|mph|rpm|prnd|street|ave|blvd|rd|dr|hwy)\b""", RegexOption.IGNORE_CASE)
 
         for (line in topLines) {
             val l = line.lowercase()
             if (stationIndicatorPattern.containsMatchIn(l) && !excludePattern.containsMatchIn(l)) {
-                return Pair(line.trim().take(60), 0.60f)
+                val cleaned = line.trim()
+                    .replace(Regex("""^[*#\s]+"""), "")
+                    .replace(Regex("""[#*]+.*$"""), "")
+                    .trim()
+                    .take(50)
+                if (cleaned.length >= 3) {
+                    return Pair(cleaned, 0.65f)
+                }
             }
         }
+
+        // 3. Fallback to clean business header line (top 4 lines)
+        for (line in topLines.take(4)) {
+            val upper = line.uppercase()
+            if (upper.contains("WELCOME") || upper.contains("RECEIPT") || upper.contains("THANK") ||
+                upper.contains("DATE") || upper.contains("TIME") || upper.contains("PUMP") ||
+                upper.contains("GALLON") || upper.contains("TOTAL") || upper.contains("TEL") ||
+                upper.contains("PHONE") || line.contains("$") || line.matches(Regex(""".*\d{3,}.*"""))) {
+                continue
+            }
+            if (line.count { it.isLetter() } >= 3) {
+                val cleanedHeader = line.split(" ")
+                    .filter { word -> !word.contains(Regex("""\d""")) }
+                    .joinToString(" ") { word -> word.lowercase().replaceFirstChar { it.uppercase() } }
+                    .trim()
+                if (cleanedHeader.length >= 3) {
+                    return Pair(cleanedHeader, 0.50f)
+                }
+            }
+        }
+
         return Pair(null, 0f)
     }
 
@@ -404,30 +478,35 @@ class ReceiptParserService {
         val lines = text.lines().map { it.trim() }.filter { it.isNotBlank() }
         val candidates = mutableListOf<Pair<Int, Float>>()
 
+        // Normalize text line for OCR character confusion in numeric contexts (e.g., "12345O" -> "123450")
+        val sanitizedText = text
+            .replace(Regex("""(\b\d{4,6})[Oo]\b"""), "$10")
+            .replace(Regex("""\b[Oo](\d{4,6}\b)"""), "0$1")
+
         // Pattern 1: Number followed by unit or keyword (e.g. "124,567 mi", "124567.8 mi", "124567 miles", "124567 odo", "124567 km")
         val numKeyPattern = Regex("""\b([\d,]{4,7}(?:\.\d)?)\s*(?:mi|miles|km|odo|odometer)\b""", RegexOption.IGNORE_CASE)
-        numKeyPattern.findAll(text).forEach { match ->
-            val lineStart = (match.range.first - 15).coerceAtLeast(0)
-            val lineEnd = (match.range.last + 15).coerceAtMost(text.length)
-            val context = text.substring(lineStart, lineEnd).lowercase()
-            if (!context.contains("trip")) {
+        numKeyPattern.findAll(sanitizedText).forEach { match ->
+            val lineStart = (match.range.first - 20).coerceAtLeast(0)
+            val lineEnd = (match.range.last + 20).coerceAtMost(sanitizedText.length)
+            val context = sanitizedText.substring(lineStart, lineEnd).lowercase()
+            if (!context.contains("trip") && !context.contains("gal") && !context.contains("$")) {
                 val raw = match.groupValues[1].replace(",", "")
                 val doubleVal = raw.toDoubleOrNull()
                 val value = doubleVal?.toInt()
                 if (value != null && value in 1000..999999) {
-                    candidates.add(Pair(value, 0.90f))
+                    candidates.add(Pair(value, 0.95f))
                 }
             }
         }
 
         // Pattern 2: Keyword followed by number (e.g. "odo 124567", "odometer: 124,567", "mileage 124567")
         val keyNumPattern = Regex("""\b(?:odo|odometer|mileage)\s*[:=]?\s*([\d,]{4,7}(?:\.\d)?)\b""", RegexOption.IGNORE_CASE)
-        keyNumPattern.findAll(text).forEach { match ->
+        keyNumPattern.findAll(sanitizedText).forEach { match ->
             val raw = match.groupValues[1].replace(",", "")
             val doubleVal = raw.toDoubleOrNull()
             val value = doubleVal?.toInt()
             if (value != null && value in 1000..999999) {
-                candidates.add(Pair(value, 0.90f))
+                candidates.add(Pair(value, 0.95f))
             }
         }
 
@@ -455,17 +534,30 @@ class ReceiptParserService {
             }
         }
 
-        // Pattern 4: Fallback standalone 5-6 digit integer on dashboard
-        val standalonePattern = Regex("""\b(\d{1,3}(?:,\d{3})+|\d{5,6})\b""")
-        standalonePattern.findAll(text).forEach { match ->
-            val lineStart = (match.range.first - 15).coerceAtLeast(0)
-            val lineEnd = (match.range.last + 15).coerceAtMost(text.length)
-            val context = text.substring(lineStart, lineEnd).lowercase()
-            if (!context.contains("$") && !context.contains("trip")) {
-                val raw = match.groupValues[1].replace(",", "")
-                val value = raw.toIntOrNull()
+        // Pattern 4: Fallback standalone 5-6 digit integer (e.g., on dashboard photo)
+        // Must strictly filter out US zip codes, phone numbers, store numbers, addresses, dates, timestamps
+        val standalonePattern = Regex("""\b(\d{5,6})\b""")
+        standalonePattern.findAll(sanitizedText).forEach { match ->
+            val lineStart = (match.range.first - 30).coerceAtLeast(0)
+            val lineEnd = (match.range.last + 30).coerceAtMost(sanitizedText.length)
+            val context = sanitizedText.substring(lineStart, lineEnd).lowercase()
+
+            val isMetadata = context.contains("$") || context.contains("trip") || context.contains("tel") ||
+                    context.contains("phone") || context.contains("fax") || context.contains("store") ||
+                    context.contains("pump") || context.contains("st#") || context.contains("trans") ||
+                    context.contains("auth") || context.contains("card") || context.contains("date") ||
+                    context.contains("time") || context.contains("receipt") || context.contains("invoice") ||
+                    context.contains("st") || context.contains("ave") || context.contains("blvd") ||
+                    context.contains("rd") || context.contains("dr") || context.contains("hwy") ||
+                    context.contains("suite") || context.contains("po box") || context.contains("zip")
+
+            // Check if preceded by 2-letter state code (e.g. "CA 90210", "TX 75001")
+            val isZipCode = Regex("""\b(?:AL|AK|AZ|AR|CA|CO|CT|DE|FL|GA|HI|ID|IL|IN|IA|KS|KY|LA|ME|MD|MA|MI|MN|MS|MO|MT|NE|NV|NH|NJ|NM|NY|NC|ND|OH|OK|OR|PA|RI|SC|SD|TN|TX|UT|VT|VA|WA|WV|WI|WY)\s+\d{5}\b""", RegexOption.IGNORE_CASE).containsMatchIn(context)
+
+            if (!isMetadata && !isZipCode) {
+                val value = match.groupValues[1].toIntOrNull()
                 if (value != null && value in 10000..999999) {
-                    candidates.add(Pair(value, 0.50f))
+                    candidates.add(Pair(value, 0.45f))
                 }
             }
         }
@@ -479,7 +571,11 @@ class ReceiptParserService {
         return Pair(null, 0f)
     }
 
-    private fun extractTripDistance(text: String): Pair<Double?, Float> {
+    private fun extractTripDistance(
+        text: String,
+        gallons: Double? = null,
+        totalCost: Double? = null
+    ): Pair<Double?, Float> {
         val lines = text.lines().map { it.trim() }.filter { it.isNotBlank() }
         val candidates = mutableListOf<Pair<Double, Float>>()
 
@@ -488,7 +584,12 @@ class ReceiptParserService {
         tripPattern.findAll(text).forEach { match ->
             val value = match.groupValues[1].toDoubleOrNull()
             if (value != null && value > 0.0 && value < 9999.0) {
-                candidates.add(Pair(value, 0.90f))
+                // Ensure it's not confusing with gallons or total cost
+                val matchesGallons = gallons != null && kotlin.math.abs(value - gallons) < 0.05
+                val matchesTotal = totalCost != null && kotlin.math.abs(value - totalCost) < 0.05
+                if (!matchesGallons && !matchesTotal) {
+                    candidates.add(Pair(value, 0.90f))
+                }
             }
         }
 
@@ -508,7 +609,11 @@ class ReceiptParserService {
                         if (numMatch != null) {
                             val value = numMatch.groupValues[1].toDoubleOrNull()
                             if (value != null && value > 0.0 && value < 9999.0) {
-                                candidates.add(Pair(value, 0.85f))
+                                val matchesGallons = gallons != null && kotlin.math.abs(value - gallons) < 0.05
+                                val matchesTotal = totalCost != null && kotlin.math.abs(value - totalCost) < 0.05
+                                if (!matchesGallons && !matchesTotal) {
+                                    candidates.add(Pair(value, 0.85f))
+                                }
                             }
                         }
                     }
@@ -525,7 +630,11 @@ class ReceiptParserService {
             if (!context.contains("odometer") && !context.contains("odo ")) {
                 val value = match.groupValues[1].toDoubleOrNull()
                 if (value != null && value > 0.0 && value < 2000.0) {
-                    candidates.add(Pair(value, 0.75f))
+                    val matchesGallons = gallons != null && kotlin.math.abs(value - gallons) < 0.05
+                    val matchesTotal = totalCost != null && kotlin.math.abs(value - totalCost) < 0.05
+                    if (!matchesGallons && !matchesTotal) {
+                        candidates.add(Pair(value, 0.75f))
+                    }
                 }
             }
         }

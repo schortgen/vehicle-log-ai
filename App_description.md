@@ -24,8 +24,9 @@ Vehicle Log AI is an intelligent vehicle maintenance and fuel tracking applicati
   * **Total Cost:** Looks for total keywords (`TOTAL`, `AMOUNT`, `DUE`, `$XX.XX`).
   * **Gallons / Quantity:** Identifies gallon indicators (`GAL`, `GALLONS`, `PUMP`).
   * **Price Per Gallon:** Matches unit rate formats (`$/GAL`, `@ $X.XXX`).
-  * **Odometer Reading:** Identifies odometer tags (`ODO`, `MILES`, `MI`).
-  * **Station / Location:** Detects gas station brand names (e.g., Shell, Chevron, Exxon, Mobil, Costco, BP).
+  * **Odometer Reading:** Identifies explicit tags (`ODO`, `MILES`, `MI`) and dashboard integers while filtering out US zip codes, store numbers, phone numbers, and timestamps.
+  * **Station / Location:** Matches normalized OCR text against a dictionary of 50+ canonical gas station and retail brands (e.g., Shell, Chevron, ExxonMobil, Costco, Sam's Club, 7-Eleven, Circle K, Speedway, Casey's, Kwik Trip, Buc-ee's, Wawa, Sheetz, Pilot Flying J, Love's, BP, ARCO, Valero, Sunoco), avoiding street address or store number noise.
+  * **Trip Distance:** Detects trip keywords (`TRIP`, `TRIP A`, `TRIP B`, `DIST`) and disambiguates trip values from fuel volume and price figures.
 * Assigns confidence scores (0.0 – 1.0) for each field based on contextual matching strength, computing an overall purchase candidate confidence.
 
 ### 4. Event Grouping (`EventGroupingService`)
