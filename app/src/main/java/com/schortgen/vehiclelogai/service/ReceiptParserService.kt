@@ -576,12 +576,33 @@ class ReceiptParserService {
         gallons: Double? = null,
         totalCost: Double? = null
     ): Pair<Double?, Float> {
-        val lines = text.lines().map { it.trim() }.filter { it.isNotBlank() }
+        // Clean gear shift indicators (e.g. PRND3, PRND, P R N D 3, PRNDL) commonly present on instrument clusters
+        val sanitizedText = text
+            .replace(Regex("""\bP\s*R\s*N\s*D\s*[321L]?\b""", RegexOption.IGNORE_CASE), "")
+            .replace(Regex("""\bPRND[321L]?\b""", RegexOption.IGNORE_CASE), "")
+
+        val lines = sanitizedText.lines().map { it.trim() }.filter { it.isNotBlank() }
         val candidates = mutableListOf<Pair<Double, Float>>()
+
+        // Pattern 0: Direct dashboard "A: 412.6" or "B: 4582.4" match when "TRIP" or "MI" is anywhere in raw text
+        val isDashboardContext = sanitizedText.contains("trip", ignoreCase = true) || sanitizedText.contains("mi", ignoreCase = true)
+        if (isDashboardContext) {
+            val abTripPattern = Regex("""\b[AB12]\s*[:=]?\s*(\d+(?:\.\d{1,2})?)\b""", RegexOption.IGNORE_CASE)
+            abTripPattern.findAll(sanitizedText).forEach { match ->
+                val value = match.groupValues[1].toDoubleOrNull()
+                if (value != null && value > 0.0 && value < 9999.0) {
+                    val matchesGallons = gallons != null && kotlin.math.abs(value - gallons) < 0.05
+                    val matchesTotal = totalCost != null && kotlin.math.abs(value - totalCost) < 0.05
+                    if (!matchesGallons && !matchesTotal) {
+                        candidates.add(Pair(value, 0.95f))
+                    }
+                }
+            }
+        }
 
         // Pattern 1: Explicit trip keyword + number (e.g. "trip 254.3", "trip a 120.5", "trip b 45", "trip dist: 310.2", "dist 45.1")
         val tripPattern = Regex("""\b(?:trip\s*[ab12]?|dist|distance|trip\s*dist|trip\s*miles)\s*[:=]?\s*(\d+(?:\.\d{1,2})?)\b""", RegexOption.IGNORE_CASE)
-        tripPattern.findAll(text).forEach { match ->
+        tripPattern.findAll(sanitizedText).forEach { match ->
             val value = match.groupValues[1].toDoubleOrNull()
             if (value != null && value > 0.0 && value < 9999.0) {
                 // Ensure it's not confusing with gallons or total cost
@@ -623,10 +644,10 @@ class ReceiptParserService {
 
         // Pattern 3: Suffix "254.3 mi" or "254.3 miles" if value < 2000.0 and context has trip or no odo
         val miPattern = Regex("""\b(\d+[.]\d{1,2})\s*(?:mi|miles)\b""", RegexOption.IGNORE_CASE)
-        miPattern.findAll(text).forEach { match ->
+        miPattern.findAll(sanitizedText).forEach { match ->
             val lineStart = (match.range.first - 15).coerceAtLeast(0)
-            val lineEnd = (match.range.last + 15).coerceAtMost(text.length)
-            val context = text.substring(lineStart, lineEnd).lowercase()
+            val lineEnd = (match.range.last + 15).coerceAtMost(sanitizedText.length)
+            val context = sanitizedText.substring(lineStart, lineEnd).lowercase()
             if (!context.contains("odometer") && !context.contains("odo ")) {
                 val value = match.groupValues[1].toDoubleOrNull()
                 if (value != null && value > 0.0 && value < 2000.0) {
