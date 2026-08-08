@@ -197,7 +197,7 @@ fun ReviewDetailScreen(
                         contentAlignment = Alignment.Center,
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(220.dp)
+                            .height(330.dp)
                             .clickable(enabled = !activeItem?.photoPath.isNullOrEmpty()) {
                                 dialogImageUri = activeItem?.photoPath
                                 showImageDialog = true
@@ -263,7 +263,7 @@ fun ReviewDetailScreen(
                                 val isSelected = idx == selectedPhotoIndex
                                 Box(
                                     modifier = Modifier
-                                        .size(72.dp)
+                                        .size(108.dp)
                                         .clickable { selectedPhotoIndex = idx }
                                 ) {
                                     Surface(
@@ -726,7 +726,7 @@ fun ReviewDetailScreen(
                             items(ungroupedList) { uItem ->
                                 Surface(
                                     modifier = Modifier
-                                        .size(64.dp)
+                                        .size(96.dp)
                                         .clickable {
                                             showAddPhotoDialog = false
                                             if (targetEventId != null && targetEventId > 0L) {

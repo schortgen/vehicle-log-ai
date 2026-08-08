@@ -144,7 +144,7 @@ private fun ReviewQueueCard(
         ) {
             // Thumbnail
             Surface(
-                modifier = Modifier.size(64.dp),
+                modifier = Modifier.size(96.dp),
                 shape = MaterialTheme.shapes.medium,
                 color = MaterialTheme.colorScheme.surfaceVariant
             ) {
@@ -268,7 +268,7 @@ private fun GroupedEventCard(
         ) {
             // Thumbnail container showing stack or representative photo
             Surface(
-                modifier = Modifier.size(64.dp),
+                modifier = Modifier.size(96.dp),
                 shape = MaterialTheme.shapes.medium,
                 color = MaterialTheme.colorScheme.surfaceVariant
             ) {
