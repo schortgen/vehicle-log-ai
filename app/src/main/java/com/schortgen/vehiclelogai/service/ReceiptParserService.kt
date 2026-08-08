@@ -1,6 +1,7 @@
 package com.schortgen.vehiclelogai.service
 
 import com.schortgen.vehiclelogai.data.models.FuelPurchaseCandidate
+import com.schortgen.vehiclelogai.data.repository.PreferredTripMeter
 import com.schortgen.vehiclelogai.debug.DiagnosticLogger
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -72,7 +73,10 @@ class ReceiptParserService {
         Regex("""\b(\d{1,2})\s+([A-Z][a-z]{2,8})\s+(\d{4})\b""")
     )
 
-    suspend fun parse(rawText: String): FuelPurchaseCandidate = withContext(Dispatchers.Default) {
+    suspend fun parse(
+        rawText: String,
+        preferredTripMeter: PreferredTripMeter = PreferredTripMeter.TRIP_A
+    ): FuelPurchaseCandidate = withContext(Dispatchers.Default) {
         val startedAt = System.nanoTime()
         if (rawText.isBlank()) {
             DiagnosticLogger.recordParserFailure()
@@ -92,7 +96,12 @@ class ReceiptParserService {
             val pricePerGallonResult = fuelNumbersResult.pricePerGallon
             val totalCostResult = fuelNumbersResult.totalCost
             val odometerResult = extractOdometer(rawText)
-            val tripDistanceResult = extractTripDistance(rawText, gallonsResult.first, totalCostResult.first)
+            val tripDistanceResult = extractTripDistance(
+                rawText,
+                gallonsResult.first,
+                totalCostResult.first,
+                preferredTripMeter
+            )
 
             val missing = mutableListOf<String>()
             if (stationNameResult.first == null) missing.add("stationName")
@@ -578,7 +587,8 @@ class ReceiptParserService {
     private fun extractTripDistance(
         text: String,
         gallons: Double? = null,
-        totalCost: Double? = null
+        totalCost: Double? = null,
+        preferredTripMeter: PreferredTripMeter = PreferredTripMeter.TRIP_A
     ): Pair<Double?, Float> {
         // Clean gear shift indicators (e.g. PRND3, PRND, P R N D 3, PRNDL) commonly present on instrument clusters
         val sanitizedText = text
@@ -586,33 +596,69 @@ class ReceiptParserService {
             .replace(Regex("""\bPRND[321L]?\b""", RegexOption.IGNORE_CASE), "")
 
         val lines = sanitizedText.lines().map { it.trim() }.filter { it.isNotBlank() }
-        val candidates = mutableListOf<Pair<Double, Float>>()
+        val candidates = mutableListOf<Triple<Double, Float, String>>()
+
+        fun getAdjustedConfidence(baseConf: Float, meterType: String): Float {
+            return when (preferredTripMeter) {
+                PreferredTripMeter.TRIP_A -> when (meterType) {
+                    "A" -> (baseConf + 0.05f).coerceAtMost(0.99f)
+                    "B" -> baseConf - 0.35f
+                    else -> baseConf
+                }
+                PreferredTripMeter.TRIP_B -> when (meterType) {
+                    "B" -> (baseConf + 0.05f).coerceAtMost(0.99f)
+                    "A" -> baseConf - 0.35f
+                    else -> baseConf
+                }
+                PreferredTripMeter.ANY -> baseConf
+            }
+        }
 
         // Pattern 0: Direct dashboard "A: 412.6" or "B: 4582.4" match when "TRIP" or "MI" is anywhere in raw text
         val isDashboardContext = sanitizedText.contains("trip", ignoreCase = true) || sanitizedText.contains("mi", ignoreCase = true)
         if (isDashboardContext) {
-            val abTripPattern = Regex("""\b[AB12]\s*[:=]?\s*(\d+(?:\.\d{1,2})?)\b""", RegexOption.IGNORE_CASE)
+            val abTripPattern = Regex("""\b([AB12])\s*[:=]?\s*(\d+(?:\.\d{1,2})?)\b""", RegexOption.IGNORE_CASE)
             abTripPattern.findAll(sanitizedText).forEach { match ->
-                val value = match.groupValues[1].toDoubleOrNull()
-                if (value != null && value > 0.0 && value < 9999.0) {
-                    val matchesGallons = gallons != null && kotlin.math.abs(value - gallons) < 0.05
-                    val matchesTotal = totalCost != null && kotlin.math.abs(value - totalCost) < 0.05
-                    if (!matchesGallons && !matchesTotal) {
-                        candidates.add(Pair(value, 0.95f))
+                val typeChar = match.groupValues[1].uppercase()
+                val meterType = if (typeChar == "A" || typeChar == "1") "A" else "B"
+                var value = match.groupValues[2].toDoubleOrNull()
+                if (value != null) {
+                    if (value in 1000.0..99999.0 && !match.groupValues[2].contains(".")) {
+                        value /= 10.0
+                    }
+                    if (value > 0.0 && value < 9999.0) {
+                        val matchesGallons = gallons != null && kotlin.math.abs(value - gallons) < 0.05
+                        val matchesTotal = totalCost != null && kotlin.math.abs(value - totalCost) < 0.05
+                        if (!matchesGallons && !matchesTotal) {
+                            val conf = getAdjustedConfidence(0.95f, meterType)
+                            candidates.add(Triple(value, conf, meterType))
+                        }
                     }
                 }
             }
         }
 
-        // Pattern 1: Explicit trip keyword + number on same line (e.g. "trip 254.3", "trip a 120.5", "trip b 45", "trip dist: 310.2")
-        val tripPattern = Regex("""\b(?:trip\s*[ab12]?|dist|distance|trip\s*dist|trip\s*miles)\s*[:=]?\s*(\d+(?:\.\d{1,2})?)\b""", RegexOption.IGNORE_CASE)
+        // Pattern 1: Explicit trip keyword + number on same line (e.g. "trip a 120.5", "trip b 45", "trip dist: 310.2")
+        val tripPattern = Regex("""\b(?:trip\s*([ab12])?|dist|distance|trip\s*dist|trip\s*miles)\s*[:=]?\s*(\d+(?:\.\d{1,2})?)\b""", RegexOption.IGNORE_CASE)
         tripPattern.findAll(sanitizedText).forEach { match ->
-            val value = match.groupValues[1].toDoubleOrNull()
-            if (value != null && value > 0.0 && value < 9999.0) {
-                val matchesGallons = gallons != null && kotlin.math.abs(value - gallons) < 0.05
-                val matchesTotal = totalCost != null && kotlin.math.abs(value - totalCost) < 0.05
-                if (!matchesGallons && !matchesTotal) {
-                    candidates.add(Pair(value, 0.95f))
+            val typeGroup = match.groupValues[1].uppercase()
+            val meterType = when (typeGroup) {
+                "A", "1" -> "A"
+                "B", "2" -> "B"
+                else -> "GENERIC"
+            }
+            var value = match.groupValues[2].toDoubleOrNull()
+            if (value != null) {
+                if (value in 1000.0..99999.0 && !match.groupValues[2].contains(".")) {
+                    value /= 10.0
+                }
+                if (value > 0.0 && value < 9999.0) {
+                    val matchesGallons = gallons != null && kotlin.math.abs(value - gallons) < 0.05
+                    val matchesTotal = totalCost != null && kotlin.math.abs(value - totalCost) < 0.05
+                    if (!matchesGallons && !matchesTotal) {
+                        val conf = getAdjustedConfidence(0.95f, meterType)
+                        candidates.add(Triple(value, conf, meterType))
+                    }
                 }
             }
         }
@@ -621,6 +667,11 @@ class ReceiptParserService {
         for (i in lines.indices) {
             val lineLower = lines[i].lowercase()
             if (lineLower.contains("trip") || lineLower.contains("dist")) {
+                val meterType = when {
+                    lineLower.contains("trip a") || lineLower.contains("a:") || lineLower.contains("trip 1") -> "A"
+                    lineLower.contains("trip b") || lineLower.contains("b:") || lineLower.contains("trip 2") -> "B"
+                    else -> "GENERIC"
+                }
                 val neighborLines = listOfNotNull(
                     lines.getOrNull(i + 1),
                     lines.getOrNull(i - 1),
@@ -641,7 +692,8 @@ class ReceiptParserService {
                                     val matchesGallons = gallons != null && kotlin.math.abs(value - gallons) < 0.05
                                     val matchesTotal = totalCost != null && kotlin.math.abs(value - totalCost) < 0.05
                                     if (!matchesGallons && !matchesTotal) {
-                                        candidates.add(Pair(value, 0.92f))
+                                        val conf = getAdjustedConfidence(0.92f, meterType)
+                                        candidates.add(Triple(value, conf, meterType))
                                     }
                                 }
                             }
@@ -663,7 +715,8 @@ class ReceiptParserService {
                     val matchesGallons = gallons != null && kotlin.math.abs(value - gallons) < 0.05
                     val matchesTotal = totalCost != null && kotlin.math.abs(value - totalCost) < 0.05
                     if (!matchesGallons && !matchesTotal) {
-                        candidates.add(Pair(value, 0.75f))
+                        val conf = getAdjustedConfidence(0.75f, "GENERIC")
+                        candidates.add(Triple(value, conf, "GENERIC"))
                     }
                 }
             }
@@ -671,7 +724,7 @@ class ReceiptParserService {
 
         if (candidates.isNotEmpty()) {
             val best = candidates.maxWithOrNull(compareBy({ it.second }, { it.first }))
-            DiagnosticLogger.d("Parser", "Trip candidates: ${candidates.map { "${it.first}@${it.second}" }}")
+            DiagnosticLogger.d("Parser", "Trip candidates (pref=$preferredTripMeter): ${candidates.map { "${it.first}@${it.second}[${it.third}]" }}")
             return Pair(best!!.first, best.second)
         }
 

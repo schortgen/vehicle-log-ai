@@ -21,6 +21,9 @@ import com.schortgen.vehiclelogai.ui.reviewdetail.ReviewDetailScreen
 import com.schortgen.vehiclelogai.ui.reviewqueue.ReviewQueueScreen
 import com.schortgen.vehiclelogai.ui.reviewqueue.ReviewQueueViewModel
 import com.schortgen.vehiclelogai.ui.reviewqueue.ReviewQueueViewModelFactory
+import com.schortgen.vehiclelogai.ui.settings.SettingsScreen
+import com.schortgen.vehiclelogai.ui.settings.SettingsViewModel
+import com.schortgen.vehiclelogai.ui.settings.SettingsViewModelFactory
 import com.schortgen.vehiclelogai.ui.vehicle.VehicleDetailScreen
 import com.schortgen.vehiclelogai.ui.vehicles.VehiclesScreen
 import com.schortgen.vehiclelogai.ui.vehicles.AddVehicleScreen
@@ -84,8 +87,12 @@ fun NavGraph(navController: NavHostController) {
             eventRepository = app.eventRepository,
             mlKitOcrService = app.mlKitOcrService,
             receiptParserService = app.receiptParserService,
-            eventGroupingService = eventGroupingService
+            eventGroupingService = eventGroupingService,
+            settingsRepository = app.settingsRepository
         )
+    )
+    val settingsViewModel: SettingsViewModel = viewModel(
+        factory = SettingsViewModelFactory(app.settingsRepository)
     )
     val dashboardViewModel: DashboardViewModel = viewModel(
         factory = DashboardViewModelFactory(
@@ -116,7 +123,7 @@ fun NavGraph(navController: NavHostController) {
         }
 
         composable(Screen.Settings.route) {
-            PlaceholderScreen("Settings")
+            SettingsScreen(navController, settingsViewModel)
         }
 
         composable(Screen.AddVehicle.route) {

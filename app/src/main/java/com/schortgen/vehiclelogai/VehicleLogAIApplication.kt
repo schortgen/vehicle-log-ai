@@ -1,4 +1,4 @@
-﻿package com.schortgen.vehiclelogai
+package com.schortgen.vehiclelogai
 
 import android.app.Application
 import androidx.room.Room
@@ -6,6 +6,7 @@ import com.schortgen.vehiclelogai.data.local.VehicleLogDatabase
 import com.schortgen.vehiclelogai.data.repository.EventRepository
 import com.schortgen.vehiclelogai.data.repository.PhotoScannerRepository
 import com.schortgen.vehiclelogai.data.repository.ReviewItemRepository
+import com.schortgen.vehiclelogai.data.repository.SettingsRepository
 import com.schortgen.vehiclelogai.data.repository.VehicleRepository
 import com.schortgen.vehiclelogai.debug.DiagnosticLogger
 import com.schortgen.vehiclelogai.service.MlKitOcrService
@@ -32,6 +33,8 @@ class VehicleLogAIApplication : Application {
     lateinit var mlKitOcrService: MlKitOcrService
         private set
     lateinit var receiptParserService: ReceiptParserService
+        private set
+    lateinit var settingsRepository: SettingsRepository
         private set
 
     constructor() : super()
@@ -67,6 +70,7 @@ class VehicleLogAIApplication : Application {
         )
         mlKitOcrService = MlKitOcrService(this)
         receiptParserService = ReceiptParserService()
+        settingsRepository = SettingsRepository(this)
 
         // 3. Force SQLite to create the databases folder and .db files by
         //    performing a safe, dummy read operation on a background thread.

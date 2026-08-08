@@ -1,4 +1,4 @@
-﻿package com.schortgen.vehiclelogai.ui.debug
+package com.schortgen.vehiclelogai.ui.debug
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -63,7 +63,8 @@ fun DebugScreen(navController: NavController) {
             vehicleRepository = app.vehicleRepository,
             eventRepository = app.eventRepository,
             mlKitOcrService = app.mlKitOcrService,
-            receiptParserService = app.receiptParserService
+            receiptParserService = app.receiptParserService,
+            settingsRepository = app.settingsRepository
         )
     )
     val viewModel: DiagnosticsViewModel = viewModel(

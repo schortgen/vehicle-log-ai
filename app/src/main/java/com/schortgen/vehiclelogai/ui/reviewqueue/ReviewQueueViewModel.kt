@@ -9,7 +9,9 @@ import com.schortgen.vehiclelogai.data.models.ProcessingStatus
 import com.schortgen.vehiclelogai.data.models.ReviewItem
 import com.schortgen.vehiclelogai.data.models.Vehicle
 import com.schortgen.vehiclelogai.data.repository.EventRepository
+import com.schortgen.vehiclelogai.data.repository.PreferredTripMeter
 import com.schortgen.vehiclelogai.data.repository.ReviewItemRepository
+import com.schortgen.vehiclelogai.data.repository.SettingsRepository
 import com.schortgen.vehiclelogai.data.repository.VehicleRepository
 import com.schortgen.vehiclelogai.debug.DiagnosticLogger
 import com.schortgen.vehiclelogai.service.CandidateMapper
@@ -38,7 +40,8 @@ class ReviewQueueViewModel(
     private val eventRepository: EventRepository? = null,
     private val mlKitOcrService: MlKitOcrService? = null,
     private val receiptParserService: ReceiptParserService? = null,
-    private val eventGroupingService: EventGroupingService? = null
+    private val eventGroupingService: EventGroupingService? = null,
+    private val settingsRepository: SettingsRepository? = null
 ) : ViewModel() {
 
     private val _ocrProcessingIds = MutableStateFlow<Set<Long>>(emptySet())
@@ -492,7 +495,8 @@ class ReviewQueueViewModel(
                     )
 
                     if (ocrResult.rawText.isNotBlank()) {
-                        val candidate = parser.parse(ocrResult.rawText)
+                        val prefMeter = settingsRepository?.getPreferredTripMeter() ?: PreferredTripMeter.TRIP_A
+                        val candidate = parser.parse(ocrResult.rawText, prefMeter)
                         updatedItem = updatedItem.copy(
                             parsedData = serializeCandidate(candidate)
                         )
@@ -580,7 +584,8 @@ class ReviewQueueViewModelFactory(
     private val eventRepository: EventRepository? = null,
     private val mlKitOcrService: MlKitOcrService? = null,
     private val receiptParserService: ReceiptParserService? = null,
-    private val eventGroupingService: EventGroupingService? = null
+    private val eventGroupingService: EventGroupingService? = null,
+    private val settingsRepository: SettingsRepository? = null
 ) : ViewModelProvider.Factory {
     override fun <T : ViewModel> create(modelClass: Class<T>): T {
         if (modelClass.isAssignableFrom(ReviewQueueViewModel::class.java)) {
@@ -591,7 +596,8 @@ class ReviewQueueViewModelFactory(
                 eventRepository,
                 mlKitOcrService,
                 receiptParserService,
-                eventGroupingService
+                eventGroupingService,
+                settingsRepository
             ) as T
         }
         throw IllegalArgumentException("Unknown ViewModel class")
