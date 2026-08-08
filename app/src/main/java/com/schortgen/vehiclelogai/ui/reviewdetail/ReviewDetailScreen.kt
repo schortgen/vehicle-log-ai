@@ -693,7 +693,16 @@ fun ReviewDetailScreen(
     // Add Photo to Group Dialog
     if (showAddPhotoDialog) {
         val ungroupedList = remember(reviewItems, groupItems) {
-            reviewItems.filter { it.eventId == null && it !in groupItems }
+            val available = reviewItems.filter { it.eventId == null && it !in groupItems }
+            if (groupItems.isEmpty()) {
+                available.take(2)
+            } else {
+                val minDate = groupItems.minOf { it.captureDate }
+                val maxDate = groupItems.maxOf { it.captureDate }
+                val photoBefore = available.filter { it.captureDate <= minDate }.maxByOrNull { it.captureDate }
+                val photoAfter = available.filter { it.captureDate >= maxDate }.minByOrNull { it.captureDate }
+                listOfNotNull(photoBefore, photoAfter).distinctBy { it.id }.sortedBy { it.captureDate }
+            }
         }
 
         AlertDialog(
@@ -718,12 +727,16 @@ fun ReviewDetailScreen(
 
                     if (ungroupedList.isNotEmpty()) {
                         Text(
-                            text = "Or select an ungrouped photo:",
+                            text = "Or select a adjacent photo:",
                             style = MaterialTheme.typography.labelMedium,
                             fontWeight = FontWeight.SemiBold
                         )
                         LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             items(ungroupedList) { uItem ->
+                                val minGroupDate = groupItems.minOfOrNull { it.captureDate } ?: 0L
+                                val isBefore = minGroupDate > 0L && uItem.captureDate <= minGroupDate
+                                val labelText = if (isBefore) "Earlier" else "Later"
+
                                 Surface(
                                     modifier = Modifier
                                         .size(96.dp)
@@ -739,17 +752,32 @@ fun ReviewDetailScreen(
                                     color = MaterialTheme.colorScheme.surfaceVariant
                                 ) {
                                     val uPath = uItem.photoPath
-                                    if (!uPath.isNullOrBlank()) {
-                                        val uData = if (uPath.startsWith("content://") || uPath.startsWith("file://")) Uri.parse(uPath) else uPath
-                                        AsyncImage(
-                                            model = ImageRequest.Builder(context).data(uData).build(),
-                                            contentDescription = "Ungrouped Photo",
-                                            contentScale = ContentScale.Crop,
-                                            modifier = Modifier.fillMaxSize()
-                                        )
-                                    } else {
-                                        Box(contentAlignment = Alignment.Center) {
-                                            Text("📷")
+                                    Box(modifier = Modifier.fillMaxSize()) {
+                                        if (!uPath.isNullOrBlank()) {
+                                            val uData = if (uPath.startsWith("content://") || uPath.startsWith("file://")) Uri.parse(uPath) else uPath
+                                            AsyncImage(
+                                                model = ImageRequest.Builder(context).data(uData).build(),
+                                                contentDescription = "Ungrouped Photo",
+                                                contentScale = ContentScale.Crop,
+                                                modifier = Modifier.fillMaxSize()
+                                            )
+                                        } else {
+                                            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                                                Text("📷")
+                                            }
+                                        }
+                                        Surface(
+                                            modifier = Modifier
+                                                .align(Alignment.BottomCenter)
+                                                .fillMaxWidth(),
+                                            color = Color.Black.copy(alpha = 0.65f)
+                                        ) {
+                                            Text(
+                                                text = labelText,
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = Color.White,
+                                                modifier = Modifier.padding(vertical = 2.dp, horizontal = 4.dp)
+                                            )
                                         }
                                     }
                                 }

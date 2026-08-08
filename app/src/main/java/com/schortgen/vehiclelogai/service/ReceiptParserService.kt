@@ -126,12 +126,16 @@ class ReceiptParserService {
                 return Pair(cleaned, 0.85f)
             }
         }
-        val fallbackLine = topLines.firstOrNull { line ->
+        val stationIndicatorPattern = Regex("""\b(?:station|gas|mart|express|store|market|service\s+station|fuel|clean|stop|plaza|inc|llc)\b""", RegexOption.IGNORE_CASE)
+        val excludePattern = Regex("""\b(?:receipt|welcome|date|time|phone|thank|mileage|odometer|trip|temp|°f|°c|mph|rpm|prnd)\b""", RegexOption.IGNORE_CASE)
+
+        for (line in topLines) {
             val l = line.lowercase()
-            !l.contains("receipt") && !l.contains("welcome") && !l.contains("store") &&
-            !l.contains("date") && !l.contains("time") && !l.matches(Regex(""".*\d{3}-\d{3}-\d{4}.*"""))
-        } ?: topLines.firstOrNull()
-        return Pair(fallbackLine, 0.4f)
+            if (stationIndicatorPattern.containsMatchIn(l) && !excludePattern.containsMatchIn(l)) {
+                return Pair(line.trim().take(60), 0.60f)
+            }
+        }
+        return Pair(null, 0f)
     }
 
     private fun extractDate(text: String): Pair<String?, Float> {
@@ -151,6 +155,22 @@ class ReceiptParserService {
     )
 
     private fun extractFuelNumbers(lines: List<String>, fullText: String): ExtractedFuelNumbers {
+        val lowerFull = fullText.lowercase()
+        val hasDollar = lowerFull.contains("$")
+        val hasStationKw = stationKeywords.any { lowerFull.contains(it) }
+        val hasFuelKw = lowerFull.contains("gallons") || lowerFull.contains("price/gal") ||
+                        lowerFull.contains("price per gal") || lowerFull.contains("total cost") ||
+                        lowerFull.contains("fuel total") || lowerFull.contains("total due") ||
+                        lowerFull.contains("pump") || lowerFull.contains("receipt")
+
+        if (!hasDollar && !hasStationKw && !hasFuelKw) {
+            return ExtractedFuelNumbers(
+                gallons = Pair(null, 0f),
+                pricePerGallon = Pair(null, 0f),
+                totalCost = Pair(null, 0f)
+            )
+        }
+
         var gVal: Double? = null
         var gConf = 0f
         var pVal: Double? = null
@@ -190,8 +210,8 @@ class ReceiptParserService {
             val isTotalLine = lowerLine.contains("total") || lowerLine.contains("amount") || lowerLine.contains("charge") ||
                               lowerLine.contains("sale") || lowerLine.contains("balance") || lowerLine.contains("due")
 
-            // A) Check for Gallons quantity (must NOT be a price or total line)
-            if (gVal == null && !isPriceLine && !isTotalLine &&
+            // A) Check for Gallons quantity (must NOT be a price or total line, and must NOT be MPG)
+            if (gVal == null && !isPriceLine && !isTotalLine && !lowerLine.contains("mpg") && !lowerLine.contains("mi/gal") &&
                 (lowerLine.contains("gal") || lowerLine.contains("qty") || lowerLine.contains("volume") || lowerLine.contains("gallons"))) {
                 val galMatch = Regex("""\b(\d+[.]\d{2,3})\b""").find(line)
                 if (galMatch != null) {
@@ -314,7 +334,7 @@ class ReceiptParserService {
             val startIdx = (match.range.first - 10).coerceAtLeast(0)
             val endIdx = (match.range.last + 10).coerceAtMost(lower.length)
             val context = lower.substring(startIdx, endIdx)
-            if (!context.contains("price") && !context.contains("/") && !context.contains("per") && !context.contains("@") && !context.contains("ppg")) {
+            if (!context.contains("price") && !context.contains("/") && !context.contains("per") && !context.contains("@") && !context.contains("ppg") && !context.contains("mpg")) {
                 val value = valStr.toDoubleOrNull()
                 if (value != null && value > 0.5 && value < 200.0) {
                     return Pair(value, 0.90f)
@@ -381,56 +401,141 @@ class ReceiptParserService {
     }
 
     private fun extractOdometer(text: String): Pair<Int?, Float> {
-        val lower = text.lowercase()
-        // Primary pattern: look for odometer keywords followed by a number (allow commas)
-        val odoPattern = Regex("""\b(?:odo|odometer|mileage|mi|miles)\s*[:]?\s*([\d,]{4,8})\b""", RegexOption.IGNORE_CASE)
+        val lines = text.lines().map { it.trim() }.filter { it.isNotBlank() }
         val candidates = mutableListOf<Pair<Int, Float>>()
-        odoPattern.findAll(lower).forEach { match ->
+
+        // Pattern 1: Number followed by unit or keyword (e.g. "124,567 mi", "124567.8 mi", "124567 miles", "124567 odo", "124567 km")
+        val numKeyPattern = Regex("""\b([\d,]{4,7}(?:\.\d)?)\s*(?:mi|miles|km|odo|odometer)\b""", RegexOption.IGNORE_CASE)
+        numKeyPattern.findAll(text).forEach { match ->
+            val lineStart = (match.range.first - 15).coerceAtLeast(0)
+            val lineEnd = (match.range.last + 15).coerceAtMost(text.length)
+            val context = text.substring(lineStart, lineEnd).lowercase()
+            if (!context.contains("trip")) {
+                val raw = match.groupValues[1].replace(",", "")
+                val doubleVal = raw.toDoubleOrNull()
+                val value = doubleVal?.toInt()
+                if (value != null && value in 1000..999999) {
+                    candidates.add(Pair(value, 0.90f))
+                }
+            }
+        }
+
+        // Pattern 2: Keyword followed by number (e.g. "odo 124567", "odometer: 124,567", "mileage 124567")
+        val keyNumPattern = Regex("""\b(?:odo|odometer|mileage)\s*[:=]?\s*([\d,]{4,7}(?:\.\d)?)\b""", RegexOption.IGNORE_CASE)
+        keyNumPattern.findAll(text).forEach { match ->
             val raw = match.groupValues[1].replace(",", "")
-            val value = raw.toIntOrNull()
-            if (value != null && value > 0 && value < 999999) {
-                // High confidence when keyword is present
-                candidates.add(Pair(value, 0.85f))
+            val doubleVal = raw.toDoubleOrNull()
+            val value = doubleVal?.toInt()
+            if (value != null && value in 1000..999999) {
+                candidates.add(Pair(value, 0.90f))
             }
         }
-        // Fallback: any standalone 5-6 digit number could be an odometer reading
-        val standalonePattern = Regex("""\b(\d{5,6})\b""")
-        standalonePattern.findAll(lower).forEach { match ->
-            val value = match.groupValues[1].toIntOrNull()
-            if (value != null && value > 10000 && value < 999999) {
-                candidates.add(Pair(value, 0.4f))
+
+        // Pattern 3: Multi-line adjacent check (e.g., Line 1: "ODO" or "ODOMETER", Line 2: "124,567")
+        for (i in lines.indices) {
+            val lineLower = lines[i].lowercase()
+            if ((lineLower.contains("odo") || lineLower.contains("odometer") || lineLower.contains("mileage")) && !lineLower.contains("trip")) {
+                val neighborLines = listOfNotNull(
+                    lines[i],
+                    lines.getOrNull(i - 1),
+                    lines.getOrNull(i + 1)
+                )
+                for (nLine in neighborLines) {
+                    if (!nLine.lowercase().contains("trip")) {
+                        val numMatch = Regex("""\b([\d,]{4,7}(?:\.\d)?)\b""").find(nLine)
+                        if (numMatch != null) {
+                            val raw = numMatch.groupValues[1].replace(",", "")
+                            val value = raw.toDoubleOrNull()?.toInt()
+                            if (value != null && value in 1000..999999) {
+                                candidates.add(Pair(value, 0.85f))
+                            }
+                        }
+                    }
+                }
             }
         }
+
+        // Pattern 4: Fallback standalone 5-6 digit integer on dashboard
+        val standalonePattern = Regex("""\b(\d{1,3}(?:,\d{3})+|\d{5,6})\b""")
+        standalonePattern.findAll(text).forEach { match ->
+            val lineStart = (match.range.first - 15).coerceAtLeast(0)
+            val lineEnd = (match.range.last + 15).coerceAtMost(text.length)
+            val context = text.substring(lineStart, lineEnd).lowercase()
+            if (!context.contains("$") && !context.contains("trip")) {
+                val raw = match.groupValues[1].replace(",", "")
+                val value = raw.toIntOrNull()
+                if (value != null && value in 10000..999999) {
+                    candidates.add(Pair(value, 0.50f))
+                }
+            }
+        }
+
         if (candidates.isNotEmpty()) {
-            // Choose highest confidence; if tie, pick largest value (odometer should be monotonic)
             val best = candidates.maxWithOrNull(compareBy({ it.second }, { it.first }))
-            // Log all candidates for debugging purposes
             DiagnosticLogger.d("Parser", "Odometer candidates: ${candidates.map { "${it.first}@${it.second}" }}")
             return Pair(best!!.first, best.second)
         }
+
         return Pair(null, 0f)
     }
 
     private fun extractTripDistance(text: String): Pair<Double?, Float> {
-        val lower = text.lowercase()
-        // Match patterns like "trip 254.3", "trip a 120.5", "trip dist: 310.2", "dist 45.1"
-        val tripPattern = Regex("""\b(?:trip|trip\s*[ab]|dist|distance|trip\s*miles)\s*[:]?\s*(\d+[.]\d{1,2})\b""", RegexOption.IGNORE_CASE)
-        val match1 = tripPattern.find(lower)
-        if (match1 != null) {
-            val value = match1.groupValues[1].toDoubleOrNull()
-            if (value != null && value > 0 && value < 9999) {
-                return Pair(value, 0.85f)
+        val lines = text.lines().map { it.trim() }.filter { it.isNotBlank() }
+        val candidates = mutableListOf<Pair<Double, Float>>()
+
+        // Pattern 1: Explicit trip keyword + number (e.g. "trip 254.3", "trip a 120.5", "trip b 45", "trip dist: 310.2", "dist 45.1")
+        val tripPattern = Regex("""\b(?:trip\s*[ab12]?|dist|distance|trip\s*dist|trip\s*miles)\s*[:=]?\s*(\d+(?:\.\d{1,2})?)\b""", RegexOption.IGNORE_CASE)
+        tripPattern.findAll(text).forEach { match ->
+            val value = match.groupValues[1].toDoubleOrNull()
+            if (value != null && value > 0.0 && value < 9999.0) {
+                candidates.add(Pair(value, 0.90f))
             }
         }
-        // Match suffix "254.3 mi" or "254.3 miles"
+
+        // Pattern 2: Multi-line trip check (e.g., Line 1: "TRIP A", Line 2: "245.3")
+        for (i in lines.indices) {
+            val lineLower = lines[i].lowercase()
+            if (lineLower.contains("trip") || lineLower.contains("dist")) {
+                val neighborLines = listOfNotNull(
+                    lines[i],
+                    lines.getOrNull(i + 1),
+                    lines.getOrNull(i - 1)
+                )
+                for (nLine in neighborLines) {
+                    val nLower = nLine.lowercase()
+                    if (!nLower.contains("odometer") && !nLower.contains("odo ")) {
+                        val numMatch = Regex("""\b(\d+(?:\.\d{1,2})?)\b""").find(nLine)
+                        if (numMatch != null) {
+                            val value = numMatch.groupValues[1].toDoubleOrNull()
+                            if (value != null && value > 0.0 && value < 9999.0) {
+                                candidates.add(Pair(value, 0.85f))
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Pattern 3: Suffix "254.3 mi" or "254.3 miles" if value < 2000.0 and context has trip or no odo
         val miPattern = Regex("""\b(\d+[.]\d{1,2})\s*(?:mi|miles)\b""", RegexOption.IGNORE_CASE)
-        val match2 = miPattern.find(lower)
-        if (match2 != null) {
-            val value = match2.groupValues[1].toDoubleOrNull()
-            if (value != null && value > 0 && value < 9999) {
-                return Pair(value, 0.80f)
+        miPattern.findAll(text).forEach { match ->
+            val lineStart = (match.range.first - 15).coerceAtLeast(0)
+            val lineEnd = (match.range.last + 15).coerceAtMost(text.length)
+            val context = text.substring(lineStart, lineEnd).lowercase()
+            if (!context.contains("odometer") && !context.contains("odo ")) {
+                val value = match.groupValues[1].toDoubleOrNull()
+                if (value != null && value > 0.0 && value < 2000.0) {
+                    candidates.add(Pair(value, 0.75f))
+                }
             }
         }
+
+        if (candidates.isNotEmpty()) {
+            val best = candidates.maxByOrNull { it.second }
+            DiagnosticLogger.d("Parser", "Trip distance candidates: ${candidates.map { "${it.first}@${it.second}" }}")
+            return Pair(best!!.first, best.second)
+        }
+
         return Pair(null, 0f)
     }
 }

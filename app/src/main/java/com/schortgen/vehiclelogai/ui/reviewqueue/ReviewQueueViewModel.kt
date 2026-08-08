@@ -151,7 +151,10 @@ class ReviewQueueViewModel(
 
     fun insertItem(item: ReviewItem) {
         viewModelScope.launch {
-            reviewItemRepository.insertReviewItem(item)
+            val id = reviewItemRepository.insertReviewItem(item)
+            if (item.ocrText.isNullOrBlank()) {
+                processOcr(id)
+            }
             runEventGrouping()
         }
     }
@@ -274,7 +277,8 @@ class ReviewQueueViewModel(
                     status = ProcessingStatus.PENDING,
                     reason = "Added photo"
                 )
-                reviewItemRepository.insertReviewItem(newItem)
+                val newId = reviewItemRepository.insertReviewItem(newItem)
+                processOcr(newId)
             } catch (e: Exception) {
                 DiagnosticLogger.e("ReviewQueueVM", "Error adding photo URI to group", e)
             }
