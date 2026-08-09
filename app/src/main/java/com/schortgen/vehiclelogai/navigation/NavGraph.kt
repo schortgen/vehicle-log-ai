@@ -90,7 +90,8 @@ fun NavGraph(navController: NavHostController) {
             mlKitOcrService = app.mlKitOcrService,
             receiptParserService = app.receiptParserService,
             eventGroupingService = eventGroupingService,
-            settingsRepository = app.settingsRepository
+            settingsRepository = app.settingsRepository,
+            photoMoverService = app.photoMoverService
         )
     )
     val settingsViewModel: SettingsViewModel = viewModel(

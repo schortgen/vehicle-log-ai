@@ -1,5 +1,6 @@
 package com.schortgen.vehiclelogai.ui.settings
 
+import android.content.Intent
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -12,6 +13,9 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Backup
 import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.DriveFileMove
+import androidx.compose.material.icons.filled.Folder
+import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Upload
@@ -22,6 +26,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.documentfile.provider.DocumentFile
 import androidx.navigation.NavHostController
 import com.schortgen.vehiclelogai.data.repository.PreferredTripMeter
 import java.text.SimpleDateFormat
@@ -36,10 +41,28 @@ fun SettingsScreen(
 ) {
     val context = LocalContext.current
     val preferredTripMeter by viewModel.preferredTripMeter.collectAsState()
+    val movePhotosOnComplete by viewModel.movePhotosOnComplete.collectAsState()
+    val completedPhotosFolderUri by viewModel.completedPhotosFolderUri.collectAsState()
+    val completedPhotosFolderName by viewModel.completedPhotosFolderName.collectAsState()
     val isBackupInProgress by viewModel.isBackupInProgress.collectAsState()
     val backupStatusMessage by viewModel.backupStatusMessage.collectAsState()
 
     var pendingRestoreUri by remember { mutableStateOf<Uri?>(null) }
+
+    val folderPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocumentTree()
+    ) { uri: Uri? ->
+        if (uri != null) {
+            val flags = Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+            try {
+                context.contentResolver.takePersistableUriPermission(uri, flags)
+            } catch (_: Exception) {}
+            val docFile = DocumentFile.fromTreeUri(context, uri)
+            val folderName = docFile?.name ?: uri.lastPathSegment ?: "Custom Folder"
+            viewModel.setCompletedPhotosFolder(uri.toString(), folderName)
+            viewModel.updateMovePhotosOnComplete(true)
+        }
+    }
 
     val exportLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.CreateDocument("application/json")
@@ -77,6 +100,114 @@ fun SettingsScreen(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
+            // Processed Photos Destination Folder Card
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp)
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.DriveFileMove,
+                            contentDescription = "Folder Move Icon",
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                        Text(
+                            text = "Processed Photos Move Destination",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    Text(
+                        text = "Automatically move photos out of your Camera/DCIM folder after data has been extracted and a vehicle event is created.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Move photos after event creation",
+                                style = MaterialTheme.typography.bodyLarge,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            Text(
+                                text = if (movePhotosOnComplete) "Active" else "Disabled",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        Switch(
+                            checked = movePhotosOnComplete,
+                            onCheckedChange = { viewModel.updateMovePhotosOnComplete(it) }
+                        )
+                    }
+
+                    if (movePhotosOnComplete) {
+                        Spacer(modifier = Modifier.height(12.dp))
+                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        Text(
+                            text = "Current Folder Location:",
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            text = completedPhotosFolderName ?: "Pictures/ProcessedVehiclePhotos",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.primary,
+                            fontWeight = FontWeight.Medium,
+                            modifier = Modifier.padding(vertical = 4.dp)
+                        )
+
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            OutlinedButton(
+                                onClick = { folderPickerLauncher.launch(null) }
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.FolderOpen,
+                                    contentDescription = "Choose Folder",
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("Choose Folder")
+                            }
+
+                            if (!completedPhotosFolderUri.isNullOrBlank()) {
+                                OutlinedButton(
+                                    onClick = {
+                                        viewModel.setCompletedPhotosFolder(null, "Pictures/ProcessedVehiclePhotos")
+                                    }
+                                ) {
+                                    Text("Reset Default")
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
             // Fuel Stop Trip Meter Selection Card
             Card(
                 modifier = Modifier.fillMaxWidth(),

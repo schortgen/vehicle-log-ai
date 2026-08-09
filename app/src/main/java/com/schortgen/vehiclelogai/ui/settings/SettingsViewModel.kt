@@ -19,6 +19,10 @@ class SettingsViewModel(
 ) : ViewModel() {
 
     val preferredTripMeter: StateFlow<PreferredTripMeter> = settingsRepository.preferredTripMeter
+    val movePhotosOnComplete: StateFlow<Boolean> = settingsRepository.movePhotosOnComplete
+    val completedPhotosFolderUri: StateFlow<String?> = settingsRepository.completedPhotosFolderUri
+    val completedPhotosFolderName: StateFlow<String?> = settingsRepository.completedPhotosFolderName
+    val hasPromptedPhotoDestination: StateFlow<Boolean> = settingsRepository.hasPromptedPhotoDestination
 
     private val _isBackupInProgress = MutableStateFlow(false)
     val isBackupInProgress: StateFlow<Boolean> = _isBackupInProgress.asStateFlow()
@@ -28,6 +32,18 @@ class SettingsViewModel(
 
     fun updatePreferredTripMeter(meter: PreferredTripMeter) {
         settingsRepository.setPreferredTripMeter(meter)
+    }
+
+    fun updateMovePhotosOnComplete(enabled: Boolean) {
+        settingsRepository.setMovePhotosOnComplete(enabled)
+    }
+
+    fun setCompletedPhotosFolder(uri: String?, displayName: String?) {
+        settingsRepository.setCompletedPhotosFolder(uri, displayName)
+    }
+
+    fun markPromptedPhotoDestination() {
+        settingsRepository.setHasPromptedPhotoDestination(true)
     }
 
     fun exportBackup(context: Context, uri: Uri) {

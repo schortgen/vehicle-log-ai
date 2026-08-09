@@ -11,6 +11,7 @@ import com.schortgen.vehiclelogai.data.repository.SettingsRepository
 import com.schortgen.vehiclelogai.data.repository.VehicleRepository
 import com.schortgen.vehiclelogai.debug.DiagnosticLogger
 import com.schortgen.vehiclelogai.service.MlKitOcrService
+import com.schortgen.vehiclelogai.service.PhotoMoverService
 import com.schortgen.vehiclelogai.service.PhotoScannerService
 import com.schortgen.vehiclelogai.service.ReceiptParserService
 import kotlinx.coroutines.CoroutineScope
@@ -36,6 +37,8 @@ class VehicleLogAIApplication : Application {
     lateinit var receiptParserService: ReceiptParserService
         private set
     lateinit var settingsRepository: SettingsRepository
+        private set
+    lateinit var photoMoverService: PhotoMoverService
         private set
     lateinit var backupRepository: BackupRepository
         private set
@@ -74,6 +77,7 @@ class VehicleLogAIApplication : Application {
         mlKitOcrService = MlKitOcrService(this)
         receiptParserService = ReceiptParserService()
         settingsRepository = SettingsRepository(this)
+        photoMoverService = PhotoMoverService(this, settingsRepository)
         backupRepository = BackupRepository(database, settingsRepository)
 
         // 3. Force SQLite to create the databases folder and .db files by

@@ -18,6 +18,7 @@ import com.schortgen.vehiclelogai.debug.DiagnosticLogger
 import com.schortgen.vehiclelogai.service.CandidateMapper
 import com.schortgen.vehiclelogai.service.EventGroupingService
 import com.schortgen.vehiclelogai.service.MlKitOcrService
+import com.schortgen.vehiclelogai.service.PhotoMoverService
 import com.schortgen.vehiclelogai.service.ReceiptParserService
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -42,7 +43,8 @@ class ReviewQueueViewModel(
     private val mlKitOcrService: MlKitOcrService? = null,
     private val receiptParserService: ReceiptParserService? = null,
     private val eventGroupingService: EventGroupingService? = null,
-    private val settingsRepository: SettingsRepository? = null
+    private val settingsRepository: SettingsRepository? = null,
+    private val photoMoverService: PhotoMoverService? = null
 ) : ViewModel() {
 
     private val _ocrProcessingIds = MutableStateFlow<Set<Long>>(emptySet())
@@ -133,7 +135,10 @@ class ReviewQueueViewModel(
 
     fun updateStatus(item: ReviewItem, newStatus: ProcessingStatus) {
         viewModelScope.launch {
-            reviewItemRepository.updateReviewItem(item.copy(status = newStatus))
+            val movedPhotoPath = if (newStatus == ProcessingStatus.COMPLETE) {
+                photoMoverService?.movePhotoIfEnabled(item.photoPath) ?: item.photoPath
+            } else item.photoPath
+            reviewItemRepository.updateReviewItem(item.copy(status = newStatus, photoPath = movedPhotoPath))
         }
     }
 
@@ -418,7 +423,9 @@ class ReviewQueueViewModel(
                     return@launch
                 }
 
-                val event = CandidateMapper.toEvent(editedCandidate, vehicleId, item)
+                val movedPhotoPath = photoMoverService?.movePhotoIfEnabled(item.photoPath) ?: item.photoPath
+                val itemWithPhoto = item.copy(photoPath = movedPhotoPath)
+                val event = CandidateMapper.toEvent(editedCandidate, vehicleId, itemWithPhoto)
 
                 eventRepository?.insertEvent(event) ?: run {
                     _saveErrors.value = "Database error: Event repository not available"
@@ -430,7 +437,7 @@ class ReviewQueueViewModel(
                 }
 
                 reviewItemRepository.updateReviewItem(
-                    item.copy(status = ProcessingStatus.COMPLETE, vehicleId = vehicleId)
+                    itemWithPhoto.copy(status = ProcessingStatus.COMPLETE, vehicleId = vehicleId)
                 )
             } catch (e: Exception) {
                 _saveErrors.value = "Error saving fuel event: ${e.message}"
@@ -469,6 +476,11 @@ class ReviewQueueViewModel(
                 val newDate = CandidateMapper.parseDate(editedCandidate.purchaseDate) ?: existingEvent.eventDate
 
                 // Update the event fields and mark as verified
+                val repPhoto = existingEvent.photoPath
+                val movedRepPhoto = if (!repPhoto.isNullOrBlank()) {
+                    photoMoverService?.movePhotoIfEnabled(repPhoto) ?: repPhoto
+                } else null
+
                 val updatedEvent = existingEvent.copy(
                     vehicleId = vehicleId,
                     eventDate = newDate,
@@ -478,7 +490,8 @@ class ReviewQueueViewModel(
                     odometer = editedCandidate.odometer,
                     tripDistance = editedCandidate.tripDistance,
                     pricePerGallon = editedCandidate.pricePerGallon,
-                    location = editedCandidate.stationName
+                    location = editedCandidate.stationName,
+                    photoPath = movedRepPhoto
                 )
 
                 eventRepository?.updateEvent(updatedEvent)
@@ -487,10 +500,11 @@ class ReviewQueueViewModel(
                     vehicleRepository?.updateVehicle(vehicle.copy(currentMileage = editedCandidate.odometer))
                 }
 
-                // Update all associated review items status to COMPLETE
+                // Update all associated review items status to COMPLETE and move photos
                 val associatedItems = reviewItems.value.filter { it.eventId == eventId }
-                val updatedItems = associatedItems.map {
-                    it.copy(status = ProcessingStatus.COMPLETE, vehicleId = vehicleId)
+                val updatedItems = associatedItems.map { item ->
+                    val movedPath = photoMoverService?.movePhotoIfEnabled(item.photoPath) ?: item.photoPath
+                    item.copy(status = ProcessingStatus.COMPLETE, vehicleId = vehicleId, photoPath = movedPath)
                 }
                 reviewItemRepository.updateAllReviewItems(updatedItems)
 
@@ -613,7 +627,8 @@ class ReviewQueueViewModelFactory(
     private val mlKitOcrService: MlKitOcrService? = null,
     private val receiptParserService: ReceiptParserService? = null,
     private val eventGroupingService: EventGroupingService? = null,
-    private val settingsRepository: SettingsRepository? = null
+    private val settingsRepository: SettingsRepository? = null,
+    private val photoMoverService: PhotoMoverService? = null
 ) : ViewModelProvider.Factory {
     override fun <T : ViewModel> create(modelClass: Class<T>): T {
         if (modelClass.isAssignableFrom(ReviewQueueViewModel::class.java)) {
@@ -625,7 +640,8 @@ class ReviewQueueViewModelFactory(
                 mlKitOcrService,
                 receiptParserService,
                 eventGroupingService,
-                settingsRepository
+                settingsRepository,
+                photoMoverService
             ) as T
         }
         throw IllegalArgumentException("Unknown ViewModel class")
