@@ -46,6 +46,35 @@ fun FuelEntryScreen(
     var userEditedGallons by remember { mutableStateOf(false) }
     var userEditedPricePerGallon by remember { mutableStateOf(false) }
     var userEditedTotalCost by remember { mutableStateOf(false) }
+    var userEditedTripDistance by remember { mutableStateOf(false) }
+    var missingEventWarning by remember { mutableStateOf<String?>(null) }
+
+    LaunchedEffect(vehicleId, odometerText) {
+        val lastEvent = eventViewModel.getLastFuelEvent(vehicleId)
+        val prevOdo = lastEvent?.odometer
+        val curOdo = odometerText.toIntOrNull()
+        if (curOdo != null) {
+            if (prevOdo != null) {
+                val diff = curOdo - prevOdo
+                if (diff >= 0) {
+                    if (!userEditedTripDistance) {
+                        tripDistanceText = diff.toString()
+                    }
+                    if (diff > 600) {
+                        missingEventWarning = "Odometer difference is over 600 miles ($diff mi). You might be missing a Fueling event."
+                    } else {
+                        missingEventWarning = null
+                    }
+                } else {
+                    missingEventWarning = "Current odometer ($curOdo) is less than previous odometer ($prevOdo)."
+                }
+            } else {
+                missingEventWarning = "No previous odometer recorded for this vehicle. You might be missing a Fueling event."
+            }
+        } else {
+            missingEventWarning = null
+        }
+    }
 
     // Error states
     var odometerError by remember { mutableStateOf<String?>(null) }
@@ -235,13 +264,31 @@ fun FuelEntryScreen(
             // Trip Distance
             OutlinedTextField(
                 value = tripDistanceText,
-                onValueChange = { tripDistanceText = it },
+                onValueChange = {
+                    tripDistanceText = it
+                    userEditedTripDistance = true
+                },
                 label = { Text("Trip Distance (optional)") },
                 placeholder = { Text("e.g. 350.5") },
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth()
             )
+
+            missingEventWarning?.let { warning ->
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    color = MaterialTheme.colorScheme.errorContainer,
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    Text(
+                        text = warning,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onErrorContainer,
+                        modifier = Modifier.padding(12.dp)
+                    )
+                }
+            }
 
             // Gallons
             OutlinedTextField(

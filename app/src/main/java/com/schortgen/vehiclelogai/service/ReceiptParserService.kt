@@ -75,7 +75,8 @@ class ReceiptParserService {
 
     suspend fun parse(
         rawText: String,
-        preferredTripMeter: PreferredTripMeter = PreferredTripMeter.TRIP_A
+        preferredTripMeter: PreferredTripMeter = PreferredTripMeter.TRIP_A,
+        previousOdometer: Int? = null
     ): FuelPurchaseCandidate = withContext(Dispatchers.Default) {
         val startedAt = System.nanoTime()
         if (rawText.isBlank()) {
@@ -96,12 +97,37 @@ class ReceiptParserService {
             val pricePerGallonResult = fuelNumbersResult.pricePerGallon
             val totalCostResult = fuelNumbersResult.totalCost
             val odometerResult = extractOdometer(rawText)
-            val tripDistanceResult = extractTripDistance(
+
+            var warningMessage: String? = null
+            var tripDistanceResult = extractTripDistance(
                 rawText,
                 gallonsResult.first,
                 totalCostResult.first,
-                preferredTripMeter
+                preferredTripMeter,
+                odometerResult.first,
+                previousOdometer
             )
+
+            if (preferredTripMeter == PreferredTripMeter.ANY) {
+                val curOdo = odometerResult.first
+                if (curOdo != null) {
+                    if (previousOdometer != null) {
+                        val diff = curOdo - previousOdometer
+                        if (diff >= 0) {
+                            tripDistanceResult = Pair(diff.toDouble(), 0.95f)
+                            if (diff > 600) {
+                                warningMessage = "Odometer difference is over 600 miles ($diff mi). You might be missing a Fueling event."
+                            }
+                        } else {
+                            tripDistanceResult = Pair(null, 0f)
+                            warningMessage = "Current odometer ($curOdo) is less than previous odometer ($previousOdometer)."
+                        }
+                    } else {
+                        tripDistanceResult = Pair(null, 0f)
+                        warningMessage = "No previous odometer recorded. You might be missing a Fueling event."
+                    }
+                }
+            }
 
             val missing = mutableListOf<String>()
             if (stationNameResult.first == null) missing.add("stationName")
@@ -139,7 +165,8 @@ class ReceiptParserService {
                 tripDistance = tripDistanceResult.first,
                 tripDistanceConfidence = tripDistanceResult.second,
                 missingFields = missing,
-                overallConfidence = overall
+                overallConfidence = overall,
+                warningMessage = warningMessage
             )
 
             val elapsedMs = (System.nanoTime() - startedAt) / 1_000_000

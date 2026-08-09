@@ -17,7 +17,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.ArrowDropDown
-import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Warning
+import com.schortgen.vehiclelogai.data.repository.PreferredTripMeter
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -170,6 +171,44 @@ fun ReviewDetailScreen(
     var isTotalCostEdited by rememberSaveable(key = "isTotalCostEdited_$reviewItemId") { mutableStateOf(false) }
     var isOdometerEdited by rememberSaveable(key = "isOdometerEdited_$reviewItemId") { mutableStateOf(false) }
     var isTripDistanceEdited by rememberSaveable(key = "isTripDistanceEdited_$reviewItemId") { mutableStateOf(false) }
+
+    val preferredTripMeter by reviewQueueViewModel.preferredTripMeter.collectAsState()
+    var missingEventWarning by remember { mutableStateOf<String?>(null) }
+
+    LaunchedEffect(selectedVehicleId, odometer, preferredTripMeter) {
+        if (preferredTripMeter == PreferredTripMeter.ANY) {
+            val vehId = selectedVehicleId
+            val curOdo = odometer.toIntOrNull()
+            if (vehId != null && vehId > 0) {
+                val prevOdo = reviewQueueViewModel.getPreviousOdometerForVehicle(vehId, targetEventId)
+                if (curOdo != null) {
+                    if (prevOdo != null) {
+                        val diff = curOdo - prevOdo
+                        if (diff >= 0) {
+                            if (!isTripDistanceEdited) {
+                                tripDistance = diff.toString()
+                            }
+                            if (diff > 600) {
+                                missingEventWarning = "Odometer difference is over 600 miles ($diff mi). You might be missing a Fueling event."
+                            } else {
+                                missingEventWarning = null
+                            }
+                        } else {
+                            missingEventWarning = "Current odometer ($curOdo) is less than previous odometer ($prevOdo)."
+                        }
+                    } else {
+                        missingEventWarning = "No previous odometer recorded for this vehicle. You might be missing a Fueling event."
+                    }
+                } else {
+                    missingEventWarning = parsedCandidate?.warningMessage
+                }
+            } else {
+                missingEventWarning = parsedCandidate?.warningMessage ?: "Select a vehicle to calculate trip distance from odometer."
+            }
+        } else {
+            missingEventWarning = null
+        }
+    }
 
     LaunchedEffect(parsedCandidate) {
         if (parsedCandidate != null) {
@@ -606,6 +645,32 @@ fun ReviewDetailScreen(
                         detected = parsedCandidate?.tripDistance != null,
                         isEdited = isTripDistanceEdited
                     )
+
+                    missingEventWarning?.let { warning ->
+                        Surface(
+                            modifier = Modifier.fillMaxWidth(),
+                            color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.9f),
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(12.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Warning,
+                                    contentDescription = "Warning",
+                                    tint = MaterialTheme.colorScheme.onErrorContainer
+                                )
+                                Text(
+                                    text = warning,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onErrorContainer,
+                                    fontWeight = FontWeight.Medium
+                                )
+                            }
+                        }
+                    }
                 }
             }
 

@@ -50,6 +50,9 @@ class ReviewQueueViewModel(
     private val _saveErrors = MutableStateFlow<String?>(null)
     val saveErrors: StateFlow<String?> = _saveErrors.asStateFlow()
 
+    val preferredTripMeter: StateFlow<PreferredTripMeter> = settingsRepository?.preferredTripMeter
+        ?: MutableStateFlow(PreferredTripMeter.TRIP_A).asStateFlow()
+
     val reviewItems: StateFlow<List<ReviewItem>> = reviewItemRepository.observeAllReviewItems()
         .stateIn(
             scope = viewModelScope,
@@ -310,6 +313,14 @@ class ReviewQueueViewModel(
         _saveErrors.value = null
     }
 
+    suspend fun getPreviousOdometerForVehicle(vehicleId: Long, excludeEventId: Long? = null): Int? {
+        val vehicleEvents = (eventRepository?.observeEventsForVehicle(vehicleId)?.firstOrNull() ?: emptyList())
+        val fuelEventsWithOdometer = vehicleEvents
+            .filter { it.eventType == EventType.FUEL && it.odometer != null && (excludeEventId == null || it.id != excludeEventId) }
+            .sortedByDescending { it.eventDate }
+        return fuelEventsWithOdometer.firstOrNull()?.odometer
+    }
+
     fun parseCandidateFromItem(item: ReviewItem): FuelPurchaseCandidate? {
         val json = item.parsedData ?: return null
         return try {
@@ -328,7 +339,8 @@ class ReviewQueueViewModel(
                 odometer = if (obj.has("odometer") && !obj.isNull("odometer")) obj.getInt("odometer") else null,
                 odometerConfidence = obj.optDouble("odometerConfidence", 0.0).toFloat(),
                 tripDistance = if (obj.has("tripDistance") && !obj.isNull("tripDistance")) obj.getDouble("tripDistance") else null,
-                tripDistanceConfidence = obj.optDouble("tripDistanceConfidence", 0.0).toFloat()
+                tripDistanceConfidence = obj.optDouble("tripDistanceConfidence", 0.0).toFloat(),
+                warningMessage = obj.optString("warningMessage", "").ifEmpty { null }
             )
         } catch (e: Exception) {
             null
@@ -496,7 +508,10 @@ class ReviewQueueViewModel(
 
                     if (ocrResult.rawText.isNotBlank()) {
                         val prefMeter = settingsRepository?.getPreferredTripMeter() ?: PreferredTripMeter.TRIP_A
-                        val candidate = parser.parse(ocrResult.rawText, prefMeter)
+                        val prevOdo = if (prefMeter == PreferredTripMeter.ANY && item.vehicleId != null && item.vehicleId > 0) {
+                            getPreviousOdometerForVehicle(item.vehicleId)
+                        } else null
+                        val candidate = parser.parse(ocrResult.rawText, prefMeter, prevOdo)
                         updatedItem = updatedItem.copy(
                             parsedData = serializeCandidate(candidate)
                         )
@@ -527,6 +542,7 @@ class ReviewQueueViewModel(
         candidate.tripDistance?.let { obj.put("tripDistance", it) }
         obj.put("tripDistanceConfidence", candidate.tripDistanceConfidence.toDouble())
         obj.put("overallConfidence", candidate.overallConfidence.toDouble())
+        candidate.warningMessage?.let { obj.put("warningMessage", it) }
         return obj.toString()
     }
 

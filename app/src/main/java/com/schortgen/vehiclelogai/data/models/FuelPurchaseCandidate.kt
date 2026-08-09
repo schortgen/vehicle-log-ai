@@ -24,5 +24,6 @@ data class FuelPurchaseCandidate(
     val tripDistance: Double? = null,
     val tripDistanceConfidence: Float = 0f,
     val missingFields: List<String> = emptyList(),
-    val overallConfidence: Float = 0f
+    val overallConfidence: Float = 0f,
+    val warningMessage: String? = null
 )

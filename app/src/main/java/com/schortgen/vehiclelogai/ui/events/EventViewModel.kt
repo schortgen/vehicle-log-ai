@@ -35,6 +35,10 @@ class EventViewModel(private val repository: EventRepository) : ViewModel() {
     suspend fun getEventById(id: Long): Event? {
         return repository.getEventById(id)
     }
+
+    suspend fun getLastFuelEvent(vehicleId: Long): Event? {
+        return repository.getLastFuelEvent(vehicleId)
+    }
 }
 
 class EventViewModelFactory(private val repository: EventRepository) : ViewModelProvider.Factory {
