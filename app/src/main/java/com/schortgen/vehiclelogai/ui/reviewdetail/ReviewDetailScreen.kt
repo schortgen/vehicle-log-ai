@@ -868,7 +868,20 @@ fun ReviewDetailScreen(
                         )
                     } else {
                         ocrDisplayItems.forEachIndexed { index, item ->
-                            val fileName = item.photoPath?.let { File(it).name }?.takeIf { it.isNotBlank() && !it.startsWith("content://") }
+                            val fileName = item.reason?.takeIf { it.startsWith("Imported: ") }
+                                ?.removePrefix("Imported: ")
+                                ?.trim()
+                                ?.takeIf { it.isNotBlank() }
+                                ?: item.photoPath?.let { path ->
+                                    val decoded = try { Uri.decode(path) } catch (_: Exception) { path }
+                                    val candidate = decoded.substringAfterLast('/')
+                                        .substringAfterLast('\\')
+                                        .trim()
+                                    if (candidate.isNotBlank() && !candidate.startsWith("content:", ignoreCase = true)) {
+                                        candidate
+                                    } else null
+                                }
+
                             val photoTitle = if (!fileName.isNullOrBlank()) "Photo ${index + 1}: $fileName" else "Photo ${index + 1}"
 
                             Text(
