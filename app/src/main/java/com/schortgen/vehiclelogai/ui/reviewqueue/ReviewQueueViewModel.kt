@@ -52,7 +52,7 @@ class ReviewQueueViewModel(
     val saveErrors: StateFlow<String?> = _saveErrors.asStateFlow()
 
     val preferredTripMeter: StateFlow<PreferredTripMeter> = settingsRepository?.preferredTripMeter
-        ?: MutableStateFlow(PreferredTripMeter.TRIP_A).asStateFlow()
+        ?: MutableStateFlow(PreferredTripMeter.ANY).asStateFlow()
 
     val reviewItems: StateFlow<List<ReviewItem>> = reviewItemRepository.observeAllReviewItems()
         .stateIn(
@@ -519,7 +519,7 @@ class ReviewQueueViewModel(
                     )
 
                     if (ocrResult.rawText.isNotBlank()) {
-                        val prefMeter = settingsRepository?.getPreferredTripMeter() ?: PreferredTripMeter.TRIP_A
+                        val prefMeter = settingsRepository?.getPreferredTripMeter() ?: PreferredTripMeter.ANY
                         val prevOdo = if (prefMeter == PreferredTripMeter.ANY && item.vehicleId != null && item.vehicleId > 0) {
                             getPreviousOdometerForVehicle(item.vehicleId)
                         } else null

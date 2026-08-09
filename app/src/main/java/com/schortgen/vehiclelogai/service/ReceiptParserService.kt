@@ -75,7 +75,7 @@ class ReceiptParserService {
 
     suspend fun parse(
         rawText: String,
-        preferredTripMeter: PreferredTripMeter = PreferredTripMeter.TRIP_A,
+        preferredTripMeter: PreferredTripMeter = PreferredTripMeter.ANY,
         previousOdometer: Int? = null
     ): FuelPurchaseCandidate = withContext(Dispatchers.Default) {
         val startedAt = System.nanoTime()
@@ -613,7 +613,7 @@ class ReceiptParserService {
         text: String,
         gallons: Double? = null,
         totalCost: Double? = null,
-        preferredTripMeter: PreferredTripMeter = PreferredTripMeter.TRIP_A
+        preferredTripMeter: PreferredTripMeter = PreferredTripMeter.ANY
     ): Pair<Double?, Float> {
         // Clean gear shift indicators (e.g. PRND3, PRND, P R N D 3, PRNDL) commonly present on instrument clusters
         val sanitizedText = text

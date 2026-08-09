@@ -27,11 +27,11 @@ class SettingsRepository(context: Context) {
     }
 
     private fun loadPreferredTripMeter(): PreferredTripMeter {
-        val savedName = prefs.getString(KEY_TRIP_METER, PreferredTripMeter.TRIP_A.name)
+        val savedName = prefs.getString(KEY_TRIP_METER, PreferredTripMeter.ANY.name)
         return try {
-            PreferredTripMeter.valueOf(savedName ?: PreferredTripMeter.TRIP_A.name)
+            PreferredTripMeter.valueOf(savedName ?: PreferredTripMeter.ANY.name)
         } catch (e: Exception) {
-            PreferredTripMeter.TRIP_A
+            PreferredTripMeter.ANY
         }
     }
 
