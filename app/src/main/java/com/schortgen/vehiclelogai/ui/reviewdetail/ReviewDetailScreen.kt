@@ -20,6 +20,7 @@ import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -116,9 +117,9 @@ fun ReviewDetailScreen(
     var selectedPhotoIndex by remember(groupItems) { mutableStateOf(0) }
     val activeItem = groupItems.getOrNull(selectedPhotoIndex.coerceIn(0, (groupItems.size - 1).coerceAtLeast(0))) ?: currentItem
 
-    var userSelectedVehicleId by remember { mutableStateOf<Long?>(null) }
-    var initialVehicleListLoaded by remember { mutableStateOf(false) }
-    var prevVehicleCount by remember { mutableStateOf(vehicles.size) }
+    var userSelectedVehicleId by rememberSaveable(key = "userSelectedVehicleId_$reviewItemId") { mutableStateOf<Long?>(null) }
+    var initialVehicleListLoaded by rememberSaveable(key = "initialVehicleListLoaded_$reviewItemId") { mutableStateOf(false) }
+    var prevVehicleCount by rememberSaveable(key = "prevVehicleCount_$reviewItemId") { mutableStateOf(vehicles.size) }
 
     LaunchedEffect(vehicles) {
         if (!initialVehicleListLoaded) {
@@ -146,29 +147,55 @@ fun ReviewDetailScreen(
         }
     }
 
-    val initialStationName = remember(parsedCandidate) { parsedCandidate?.stationName ?: "" }
-    val initialPurchaseDate = remember(parsedCandidate) { parsedCandidate?.purchaseDate ?: "" }
-    val initialGallons = remember(parsedCandidate) { parsedCandidate?.gallons?.toString() ?: "" }
-    val initialPricePerGallon = remember(parsedCandidate) { parsedCandidate?.pricePerGallon?.toString() ?: "" }
-    val initialTotalCost = remember(parsedCandidate) { parsedCandidate?.totalCost?.toString() ?: "" }
-    val initialOdometer = remember(parsedCandidate) { parsedCandidate?.odometer?.toString() ?: "" }
-    val initialTripDistance = remember(parsedCandidate) { parsedCandidate?.tripDistance?.toString() ?: "" }
+    val initialStationName = parsedCandidate?.stationName ?: ""
+    val initialPurchaseDate = parsedCandidate?.purchaseDate ?: ""
+    val initialGallons = parsedCandidate?.gallons?.toString() ?: ""
+    val initialPricePerGallon = parsedCandidate?.pricePerGallon?.toString() ?: ""
+    val initialTotalCost = parsedCandidate?.totalCost?.toString() ?: ""
+    val initialOdometer = parsedCandidate?.odometer?.toString() ?: ""
+    val initialTripDistance = parsedCandidate?.tripDistance?.toString() ?: ""
 
-    var stationName by remember(parsedCandidate) { mutableStateOf(initialStationName) }
-    var purchaseDate by remember(parsedCandidate) { mutableStateOf(initialPurchaseDate) }
-    var gallons by remember(parsedCandidate) { mutableStateOf(initialGallons) }
-    var pricePerGallon by remember(parsedCandidate) { mutableStateOf(initialPricePerGallon) }
-    var totalCost by remember(parsedCandidate) { mutableStateOf(initialTotalCost) }
-    var odometer by remember(parsedCandidate) { mutableStateOf(initialOdometer) }
-    var tripDistance by remember(parsedCandidate) { mutableStateOf(initialTripDistance) }
+    var stationName by rememberSaveable(key = "stationName_$reviewItemId") { mutableStateOf(initialStationName) }
+    var purchaseDate by rememberSaveable(key = "purchaseDate_$reviewItemId") { mutableStateOf(initialPurchaseDate) }
+    var gallons by rememberSaveable(key = "gallons_$reviewItemId") { mutableStateOf(initialGallons) }
+    var pricePerGallon by rememberSaveable(key = "pricePerGallon_$reviewItemId") { mutableStateOf(initialPricePerGallon) }
+    var totalCost by rememberSaveable(key = "totalCost_$reviewItemId") { mutableStateOf(initialTotalCost) }
+    var odometer by rememberSaveable(key = "odometer_$reviewItemId") { mutableStateOf(initialOdometer) }
+    var tripDistance by rememberSaveable(key = "tripDistance_$reviewItemId") { mutableStateOf(initialTripDistance) }
 
-    var isStationNameEdited by remember(parsedCandidate) { mutableStateOf(false) }
-    var isPurchaseDateEdited by remember(parsedCandidate) { mutableStateOf(false) }
-    var isGallonsEdited by remember(parsedCandidate) { mutableStateOf(false) }
-    var isPricePerGallonEdited by remember(parsedCandidate) { mutableStateOf(false) }
-    var isTotalCostEdited by remember(parsedCandidate) { mutableStateOf(false) }
-    var isOdometerEdited by remember(parsedCandidate) { mutableStateOf(false) }
-    var isTripDistanceEdited by remember(parsedCandidate) { mutableStateOf(false) }
+    var isStationNameEdited by rememberSaveable(key = "isStationNameEdited_$reviewItemId") { mutableStateOf(false) }
+    var isPurchaseDateEdited by rememberSaveable(key = "isPurchaseDateEdited_$reviewItemId") { mutableStateOf(false) }
+    var isGallonsEdited by rememberSaveable(key = "isGallonsEdited_$reviewItemId") { mutableStateOf(false) }
+    var isPricePerGallonEdited by rememberSaveable(key = "isPricePerGallonEdited_$reviewItemId") { mutableStateOf(false) }
+    var isTotalCostEdited by rememberSaveable(key = "isTotalCostEdited_$reviewItemId") { mutableStateOf(false) }
+    var isOdometerEdited by rememberSaveable(key = "isOdometerEdited_$reviewItemId") { mutableStateOf(false) }
+    var isTripDistanceEdited by rememberSaveable(key = "isTripDistanceEdited_$reviewItemId") { mutableStateOf(false) }
+
+    LaunchedEffect(parsedCandidate) {
+        if (parsedCandidate != null) {
+            if (!isStationNameEdited && stationName.isEmpty() && !parsedCandidate.stationName.isNullOrEmpty()) {
+                stationName = parsedCandidate.stationName
+            }
+            if (!isPurchaseDateEdited && purchaseDate.isEmpty() && !parsedCandidate.purchaseDate.isNullOrEmpty()) {
+                purchaseDate = parsedCandidate.purchaseDate
+            }
+            if (!isGallonsEdited && gallons.isEmpty() && parsedCandidate.gallons != null) {
+                gallons = parsedCandidate.gallons.toString()
+            }
+            if (!isPricePerGallonEdited && pricePerGallon.isEmpty() && parsedCandidate.pricePerGallon != null) {
+                pricePerGallon = parsedCandidate.pricePerGallon.toString()
+            }
+            if (!isTotalCostEdited && totalCost.isEmpty() && parsedCandidate.totalCost != null) {
+                totalCost = parsedCandidate.totalCost.toString()
+            }
+            if (!isOdometerEdited && odometer.isEmpty() && parsedCandidate.odometer != null) {
+                odometer = parsedCandidate.odometer.toString()
+            }
+            if (!isTripDistanceEdited && tripDistance.isEmpty() && parsedCandidate.tripDistance != null) {
+                tripDistance = parsedCandidate.tripDistance.toString()
+            }
+        }
+    }
 
     var showImageDialog by remember { mutableStateOf(false) }
     var dialogImageUri by remember { mutableStateOf<String?>(null) }
