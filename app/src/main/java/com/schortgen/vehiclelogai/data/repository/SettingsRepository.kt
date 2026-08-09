@@ -9,7 +9,7 @@ import kotlinx.coroutines.flow.asStateFlow
 enum class PreferredTripMeter(val displayName: String, val description: String) {
     TRIP_A("Trip A", "Standard meter for tracking fuel stops / fill-ups"),
     TRIP_B("Trip B", "Meter for tracking oil changes or secondary logs"),
-    ANY("Auto / Any", "Parse whichever trip meter value is detected first")
+    ANY("Calculate", "calculate based on vehicle odometer")
 }
 
 class SettingsRepository(context: Context) {
