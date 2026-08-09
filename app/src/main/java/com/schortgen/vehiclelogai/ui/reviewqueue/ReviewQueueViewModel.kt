@@ -425,6 +425,10 @@ class ReviewQueueViewModel(
                     return@launch
                 }
 
+                if (editedCandidate.odometer != null && editedCandidate.odometer > (vehicle.currentMileage ?: 0)) {
+                    vehicleRepository?.updateVehicle(vehicle.copy(currentMileage = editedCandidate.odometer))
+                }
+
                 reviewItemRepository.updateReviewItem(
                     item.copy(status = ProcessingStatus.COMPLETE, vehicleId = vehicleId)
                 )
@@ -462,9 +466,12 @@ class ReviewQueueViewModel(
                     return@launch
                 }
 
+                val newDate = CandidateMapper.parseDate(editedCandidate.purchaseDate) ?: existingEvent.eventDate
+
                 // Update the event fields and mark as verified
                 val updatedEvent = existingEvent.copy(
                     vehicleId = vehicleId,
+                    eventDate = newDate,
                     verified = true,
                     gallons = editedCandidate.gallons,
                     totalCost = editedCandidate.totalCost,
@@ -475,6 +482,10 @@ class ReviewQueueViewModel(
                 )
 
                 eventRepository?.updateEvent(updatedEvent)
+
+                if (editedCandidate.odometer != null && editedCandidate.odometer > (vehicle.currentMileage ?: 0)) {
+                    vehicleRepository?.updateVehicle(vehicle.copy(currentMileage = editedCandidate.odometer))
+                }
 
                 // Update all associated review items status to COMPLETE
                 val associatedItems = reviewItems.value.filter { it.eventId == eventId }

@@ -36,6 +36,8 @@ import com.schortgen.vehiclelogai.ui.events.EventViewModelFactory
 
 import com.schortgen.vehiclelogai.service.EventGroupingService
 
+import com.schortgen.vehiclelogai.ui.timeline.TimelineScreen
+
 sealed class Screen(val route: String) {
     object Dashboard : Screen("dashboard")
     object Vehicles : Screen("vehicles")
@@ -73,7 +75,7 @@ fun NavGraph(navController: NavHostController) {
         factory = VehicleViewModelFactory(app.vehicleRepository)
     )
     val eventViewModel: EventViewModel = viewModel(
-        factory = EventViewModelFactory(app.eventRepository)
+        factory = EventViewModelFactory(app.eventRepository, app.vehicleRepository)
     )
     val eventGroupingService = EventGroupingService(
         eventRepository = app.eventRepository,
@@ -119,7 +121,7 @@ fun NavGraph(navController: NavHostController) {
         }
 
         composable(Screen.Timeline.route) {
-            PlaceholderScreen("Timeline")
+            TimelineScreen(navController, eventViewModel, vehicleViewModel)
         }
 
         composable(Screen.Settings.route) {

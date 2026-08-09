@@ -85,30 +85,29 @@ object CandidateMapper {
      * Parse a date string from the candidate into epoch millis.
      * Supports multiple formats found on receipts.
      */
-    private fun parseDate(dateStr: String?): Long? {
+    fun parseDate(dateStr: String?): Long? {
         if (dateStr.isNullOrBlank()) return null
 
-        // Try each format
-        val formats = listOf(dateFormat, dateFormatAlt, dateFormatYearFirst, dateFormatYearFirstAlt)
-        for (fmt in formats) {
+        val formatPatterns = listOf(
+            "MM/dd/yyyy",
+            "MM-dd-yyyy",
+            "yyyy/MM/dd",
+            "yyyy-MM-dd",
+            "MMM dd, yyyy",
+            "MMMM dd, yyyy",
+            "yyyy-MM-dd'T'HH:mm:ss"
+        )
+
+        for (pattern in formatPatterns) {
             try {
-                return fmt.parse(dateStr)?.time
+                val sdf = SimpleDateFormat(pattern, Locale.US)
+                val date = sdf.parse(dateStr)
+                if (date != null) return date.time
             } catch (_: Exception) {
                 // Try next format
             }
         }
 
-        // Try manual parsing for "Month DD, YYYY" format
-        try {
-            val manualFormat = SimpleDateFormat("MMM dd, yyyy", Locale.US)
-            return manualFormat.parse(dateStr)?.time
-        } catch (_: Exception) { }
-
-        try {
-            val manualFormat2 = SimpleDateFormat("MMMM dd, yyyy", Locale.US)
-            return manualFormat2.parse(dateStr)?.time
-        } catch (_: Exception) { }
-
-        return null
+        return dateStr.toLongOrNull()
     }
 }

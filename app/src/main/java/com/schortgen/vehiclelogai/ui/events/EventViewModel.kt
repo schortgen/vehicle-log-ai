@@ -8,7 +8,16 @@ import com.schortgen.vehiclelogai.data.repository.EventRepository
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.launch
 
-class EventViewModel(private val repository: EventRepository) : ViewModel() {
+import com.schortgen.vehiclelogai.data.repository.VehicleRepository
+
+class EventViewModel(
+    private val repository: EventRepository,
+    private val vehicleRepository: VehicleRepository? = null
+) : ViewModel() {
+
+    fun observeAllEvents(): Flow<List<Event>> {
+        return repository.observeAllEvents()
+    }
 
     fun observeEventsForVehicle(vehicleId: Long): Flow<List<Event>> {
         return repository.observeEventsForVehicle(vehicleId)
@@ -17,6 +26,14 @@ class EventViewModel(private val repository: EventRepository) : ViewModel() {
     fun addEvent(event: Event) {
         viewModelScope.launch {
             repository.insertEvent(event)
+            val odo = event.odometer
+            val vehId = event.vehicleId
+            if (odo != null && vehId != null && vehicleRepository != null) {
+                val vehicle = vehicleRepository.getVehicleById(vehId)
+                if (vehicle != null && odo > (vehicle.currentMileage ?: 0)) {
+                    vehicleRepository.updateVehicle(vehicle.copy(currentMileage = odo))
+                }
+            }
         }
     }
 
@@ -41,11 +58,14 @@ class EventViewModel(private val repository: EventRepository) : ViewModel() {
     }
 }
 
-class EventViewModelFactory(private val repository: EventRepository) : ViewModelProvider.Factory {
+class EventViewModelFactory(
+    private val repository: EventRepository,
+    private val vehicleRepository: VehicleRepository? = null
+) : ViewModelProvider.Factory {
     override fun <T : ViewModel> create(modelClass: Class<T>): T {
         if (modelClass.isAssignableFrom(EventViewModel::class.java)) {
             @Suppress("UNCHECKED_CAST")
-            return EventViewModel(repository) as T
+            return EventViewModel(repository, vehicleRepository) as T
         }
         throw IllegalArgumentException("Unknown ViewModel class")
     }
