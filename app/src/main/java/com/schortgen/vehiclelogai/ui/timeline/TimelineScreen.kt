@@ -118,12 +118,13 @@ fun TimelineScreen(
                         )
                     }
                     items(vehicles) { veh ->
+                        val name = veh.nickname ?: "${veh.year ?: ""} ${veh.make ?: ""} ${veh.model ?: ""}".trim().ifEmpty { "Vehicle #${veh.id}" }
                         FilterChip(
                             selected = selectedVehicleId == veh.id,
                             onClick = {
                                 selectedVehicleId = if (selectedVehicleId == veh.id) null else veh.id
                             },
-                            label = { Text(veh.nickname) }
+                            label = { Text(name) }
                         )
                     }
                 }
@@ -204,7 +205,11 @@ fun TimelineScreen(
                     contentPadding = PaddingValues(top = 8.dp, bottom = 80.dp)
                 ) {
                     items(filteredEvents) { event ->
-                        val vehicleName = event.vehicleId?.let { vehicleMap[it]?.nickname }
+                        val vehicleName = event.vehicleId?.let { id ->
+                            vehicleMap[id]?.let { v ->
+                                v.nickname ?: "${v.year ?: ""} ${v.make ?: ""} ${v.model ?: ""}".trim().ifEmpty { "Vehicle #${v.id}" }
+                            }
+                        }
                         TimelineEventCard(
                             event = event,
                             vehicleName = vehicleName,
