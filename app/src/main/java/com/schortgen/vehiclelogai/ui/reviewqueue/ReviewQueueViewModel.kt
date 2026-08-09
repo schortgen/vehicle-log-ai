@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.schortgen.vehiclelogai.data.models.Event
+import com.schortgen.vehiclelogai.data.models.EventType
 import com.schortgen.vehiclelogai.data.models.FuelPurchaseCandidate
 import com.schortgen.vehiclelogai.data.models.ProcessingStatus
 import com.schortgen.vehiclelogai.data.models.ReviewItem

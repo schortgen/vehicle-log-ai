@@ -103,9 +103,7 @@ class ReceiptParserService {
                 rawText,
                 gallonsResult.first,
                 totalCostResult.first,
-                preferredTripMeter,
-                odometerResult.first,
-                previousOdometer
+                preferredTripMeter
             )
 
             if (preferredTripMeter == PreferredTripMeter.ANY) {
