@@ -1,4 +1,4 @@
-﻿package com.schortgen.vehiclelogai.data.local.dao
+package com.schortgen.vehiclelogai.data.local.dao
 
 import androidx.room.Dao
 import androidx.room.Delete
@@ -28,4 +28,13 @@ interface VehicleDao {
 
     @Query("SELECT COUNT(*) FROM vehicles")
     suspend fun count(): Int
+
+    @Query("SELECT * FROM vehicles")
+    suspend fun getAllVehicles(): List<Vehicle>
+
+    @Query("DELETE FROM vehicles")
+    suspend fun deleteAllVehicles()
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAll(vehicles: List<Vehicle>)
 }

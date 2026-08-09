@@ -1,5 +1,8 @@
 package com.schortgen.vehiclelogai.ui.settings
 
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -7,18 +10,23 @@ import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Backup
+import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Upload
 import androidx.compose.material3.*
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavHostController
 import com.schortgen.vehiclelogai.data.repository.PreferredTripMeter
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -26,7 +34,28 @@ fun SettingsScreen(
     navController: NavHostController,
     viewModel: SettingsViewModel
 ) {
+    val context = LocalContext.current
     val preferredTripMeter by viewModel.preferredTripMeter.collectAsState()
+    val isBackupInProgress by viewModel.isBackupInProgress.collectAsState()
+    val backupStatusMessage by viewModel.backupStatusMessage.collectAsState()
+
+    var pendingRestoreUri by remember { mutableStateOf<Uri?>(null) }
+
+    val exportLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.CreateDocument("application/json")
+    ) { uri ->
+        if (uri != null) {
+            viewModel.exportBackup(context, uri)
+        }
+    }
+
+    val restoreLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri != null) {
+            pendingRestoreUri = uri
+        }
+    }
 
     Scaffold(
         topBar = {
@@ -122,6 +151,97 @@ fun SettingsScreen(
                 }
             }
 
+            // Data Backup & Restore Card
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp)
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Backup,
+                            contentDescription = "Backup Icon",
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                        Text(
+                            text = "Backup & Restore Data",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    Text(
+                        text = "Export your vehicle profiles, fuel log history, pending review items, scanned photos, and app preferences to a single backup JSON file, or restore data from an existing backup.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    if (isBackupInProgress) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.Center
+                        ) {
+                            CircularProgressIndicator(modifier = Modifier.size(24.dp))
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Text(
+                                text = "Processing backup...",
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                        }
+                    } else {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            Button(
+                                onClick = {
+                                    val dateStr = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
+                                    exportLauncher.launch("VehicleLogAI_Backup_$dateStr.json")
+                                },
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Download,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("Export Backup")
+                            }
+
+                            OutlinedButton(
+                                onClick = {
+                                    restoreLauncher.launch(arrayOf("application/json", "*/*"))
+                                },
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Upload,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("Restore Data")
+                            }
+                        }
+                    }
+                }
+            }
+
             // About & Usage Tips Card
             Card(
                 modifier = Modifier.fillMaxWidth(),
@@ -160,5 +280,46 @@ fun SettingsScreen(
                 }
             }
         }
+    }
+
+    // Confirmation Dialog before Restoring
+    pendingRestoreUri?.let { uri ->
+        AlertDialog(
+            onDismissRequest = { pendingRestoreUri = null },
+            title = { Text("Confirm Restore") },
+            text = {
+                Text("Restoring data will replace existing vehicle profiles, fuel logs, and settings with the contents of the selected backup file.\n\nAre you sure you want to proceed?")
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        val restoreUri = uri
+                        pendingRestoreUri = null
+                        viewModel.importBackup(context, restoreUri)
+                    }
+                ) {
+                    Text("Restore")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingRestoreUri = null }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+
+    // Status / Result Dialog
+    backupStatusMessage?.let { message ->
+        AlertDialog(
+            onDismissRequest = { viewModel.clearStatusMessage() },
+            title = { Text("Backup & Restore Status") },
+            text = { Text(message) },
+            confirmButton = {
+                Button(onClick = { viewModel.clearStatusMessage() }) {
+                    Text("OK")
+                }
+            }
+        )
     }
 }

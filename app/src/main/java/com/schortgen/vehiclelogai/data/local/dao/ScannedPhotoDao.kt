@@ -29,4 +29,13 @@ interface ScannedPhotoDao {
 
     @Query("SELECT * FROM scanned_photos WHERE eventId = :eventId ORDER BY dateTaken ASC")
     fun observeByEvent(eventId: Long): Flow<List<ScannedPhoto>>
+
+    @Query("SELECT * FROM scanned_photos")
+    suspend fun getAllScannedPhotos(): List<ScannedPhoto>
+
+    @Query("DELETE FROM scanned_photos")
+    suspend fun deleteAllScannedPhotos()
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAll(scannedPhotos: List<ScannedPhoto>)
 }

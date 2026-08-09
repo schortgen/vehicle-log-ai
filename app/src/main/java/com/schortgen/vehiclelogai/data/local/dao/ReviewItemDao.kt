@@ -53,4 +53,10 @@ interface ReviewItemDao {
 
     @Query("SELECT * FROM review_items WHERE eventId IS NULL ORDER BY captureDate ASC")
     suspend fun getUngroupedItems(): List<ReviewItem>
+
+    @Query("DELETE FROM review_items")
+    suspend fun deleteAllReviewItems()
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAll(reviewItems: List<ReviewItem>)
 }

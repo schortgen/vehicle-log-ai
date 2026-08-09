@@ -92,7 +92,7 @@ fun NavGraph(navController: NavHostController) {
         )
     )
     val settingsViewModel: SettingsViewModel = viewModel(
-        factory = SettingsViewModelFactory(app.settingsRepository)
+        factory = SettingsViewModelFactory(app.settingsRepository, app.backupRepository)
     )
     val dashboardViewModel: DashboardViewModel = viewModel(
         factory = DashboardViewModelFactory(
