@@ -818,6 +818,10 @@ fun ReviewDetailScreen(
             }
 
             // Raw OCR Text Card
+            val ocrDisplayItems = remember(groupItems, activeItem, currentItem) {
+                if (groupItems.isNotEmpty()) groupItems else listOfNotNull(activeItem ?: currentItem)
+            }
+
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 shape = cardShape,
@@ -835,14 +839,16 @@ fun ReviewDetailScreen(
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onSurface
                         )
-                        if (activeItem != null) {
-                            val isProcessing = ocrProcessingIds.contains(activeItem.id)
+                        val isProcessingAny = ocrDisplayItems.any { ocrProcessingIds.contains(it.id) }
+                        if (ocrDisplayItems.isNotEmpty()) {
                             OutlinedButton(
-                                onClick = { reviewQueueViewModel.processOcr(activeItem.id) },
-                                enabled = !isProcessing,
+                                onClick = {
+                                    ocrDisplayItems.forEach { reviewQueueViewModel.processOcr(it.id) }
+                                },
+                                enabled = !isProcessingAny,
                                 shape = RoundedCornerShape(16.dp)
                             ) {
-                                if (isProcessing) {
+                                if (isProcessingAny) {
                                     CircularProgressIndicator(modifier = Modifier.size(14.dp), strokeWidth = 2.dp)
                                     Spacer(modifier = Modifier.width(4.dp))
                                     Text("Extracting...", style = MaterialTheme.typography.labelSmall)
@@ -854,20 +860,50 @@ fun ReviewDetailScreen(
                     }
                     Spacer(modifier = Modifier.height(12.dp))
 
-                    if (!activeItem?.ocrText.isNullOrBlank()) {
-                        SelectionContainer {
-                            Text(
-                                text = activeItem?.ocrText.orEmpty(),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                        }
-                    } else {
+                    if (ocrDisplayItems.isEmpty()) {
                         Text(
                             text = "No OCR data yet. Tap \"Re-extract Data\" to process this photo.",
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
+                    } else {
+                        ocrDisplayItems.forEachIndexed { index, item ->
+                            val fileName = item.photoPath?.let { File(it).name }?.takeIf { it.isNotBlank() && !it.startsWith("content://") }
+                            val photoTitle = if (!fileName.isNullOrBlank()) "Photo ${index + 1}: $fileName" else "Photo ${index + 1}"
+
+                            Text(
+                                text = photoTitle,
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+
+                            Spacer(modifier = Modifier.height(8.dp))
+
+                            if (!item.ocrText.isNullOrBlank()) {
+                                SelectionContainer {
+                                    Text(
+                                        text = item.ocrText,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                }
+                            } else {
+                                Text(
+                                    text = "No OCR data available for this photo.",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+
+                            if (index < ocrDisplayItems.size - 1) {
+                                Spacer(modifier = Modifier.height(12.dp))
+                                HorizontalDivider(
+                                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                                )
+                                Spacer(modifier = Modifier.height(12.dp))
+                            }
+                        }
                     }
                 }
             }
