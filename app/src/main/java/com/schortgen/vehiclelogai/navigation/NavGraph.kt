@@ -1,6 +1,13 @@
 package com.schortgen.vehiclelogai.navigation
 
+import android.app.Activity
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.IntentSenderRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavHostController
@@ -10,6 +17,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.navArgument
 import com.schortgen.vehiclelogai.BuildConfig
 import com.schortgen.vehiclelogai.VehicleLogAIApplication
+import com.schortgen.vehiclelogai.debug.DiagnosticLogger
 import com.schortgen.vehiclelogai.ui.components.PlaceholderScreen
 import com.schortgen.vehiclelogai.ui.dashboard.DashboardScreen
 import com.schortgen.vehiclelogai.ui.dashboard.DashboardViewModel
@@ -104,6 +112,25 @@ fun NavGraph(navController: NavHostController) {
             reviewItemRepository = app.reviewItemRepository
         )
     )
+
+    val pendingDeleteIntentSender by reviewQueueViewModel.pendingDeleteIntentSender.collectAsState()
+
+    val deleteLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartIntentSenderForResult()
+    ) { result ->
+        if (result.resultCode == Activity.RESULT_OK) {
+            DiagnosticLogger.i("PhotoMover", "System delete permission granted by user")
+        } else {
+            DiagnosticLogger.w("PhotoMover", "System delete permission denied or canceled by user")
+        }
+        reviewQueueViewModel.clearPendingDeleteIntentSender()
+    }
+
+    LaunchedEffect(pendingDeleteIntentSender) {
+        pendingDeleteIntentSender?.let { intentSender ->
+            deleteLauncher.launch(IntentSenderRequest.Builder(intentSender).build())
+        }
+    }
 
     NavHost(
         navController = navController,

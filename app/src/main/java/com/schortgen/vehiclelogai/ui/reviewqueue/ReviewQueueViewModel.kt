@@ -1,5 +1,7 @@
 package com.schortgen.vehiclelogai.ui.reviewqueue
 
+import android.content.IntentSender
+import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
@@ -52,6 +54,13 @@ class ReviewQueueViewModel(
 
     private val _saveErrors = MutableStateFlow<String?>(null)
     val saveErrors: StateFlow<String?> = _saveErrors.asStateFlow()
+
+    private val _pendingDeleteIntentSender = MutableStateFlow<IntentSender?>(null)
+    val pendingDeleteIntentSender: StateFlow<IntentSender?> = _pendingDeleteIntentSender.asStateFlow()
+
+    fun clearPendingDeleteIntentSender() {
+        _pendingDeleteIntentSender.value = null
+    }
 
     val preferredTripMeter: StateFlow<PreferredTripMeter> = settingsRepository?.preferredTripMeter
         ?: MutableStateFlow(PreferredTripMeter.ANY).asStateFlow()
@@ -420,7 +429,16 @@ class ReviewQueueViewModel(
                     return@launch
                 }
 
-                val movedPhotoPath = photoMoverService?.movePhotoIfEnabled(item.photoPath) ?: item.photoPath
+                val moveResult = photoMoverService?.movePhotoIfEnabled(item.photoPath)
+                val movedPhotoPath = moveResult?.newPath ?: item.photoPath
+
+                if (moveResult?.pendingDeleteUri != null) {
+                    val intentSender = photoMoverService?.createDeleteRequestIntentSender(listOf(moveResult.pendingDeleteUri))
+                    if (intentSender != null) {
+                        _pendingDeleteIntentSender.value = intentSender
+                    }
+                }
+
                 val itemWithPhoto = item.copy(photoPath = movedPhotoPath)
                 val event = CandidateMapper.toEvent(editedCandidate, vehicleId, itemWithPhoto)
 
@@ -472,10 +490,13 @@ class ReviewQueueViewModel(
 
                 val newDate = CandidateMapper.parseDate(editedCandidate.purchaseDate) ?: existingEvent.eventDate
 
+                val pendingUris = mutableListOf<Uri>()
                 // Update all associated review items status to COMPLETE and move photos
                 val associatedItems = reviewItems.value.filter { it.eventId == eventId }
                 val updatedItems = associatedItems.map { item ->
-                    val movedPath = photoMoverService?.movePhotoIfEnabled(item.photoPath) ?: item.photoPath
+                    val moveResult = photoMoverService?.movePhotoIfEnabled(item.photoPath)
+                    val movedPath = moveResult?.newPath ?: item.photoPath
+                    moveResult?.pendingDeleteUri?.let { pendingUris.add(it) }
                     item.copy(status = ProcessingStatus.COMPLETE, vehicleId = vehicleId, photoPath = movedPath)
                 }
                 reviewItemRepository.updateAllReviewItems(updatedItems)
@@ -486,8 +507,21 @@ class ReviewQueueViewModel(
                     val matchingUpdatedItem = updatedItems.find { updatedItem ->
                         associatedItems.any { oldItem -> oldItem.id == updatedItem.id && oldItem.photoPath == repPhoto }
                     }
-                    matchingUpdatedItem?.photoPath ?: (photoMoverService?.movePhotoIfEnabled(repPhoto) ?: repPhoto)
+                    if (matchingUpdatedItem != null) {
+                        matchingUpdatedItem.photoPath
+                    } else {
+                        val repResult = photoMoverService?.movePhotoIfEnabled(repPhoto)
+                        repResult?.pendingDeleteUri?.let { pendingUris.add(it) }
+                        repResult?.newPath ?: repPhoto
+                    }
                 } else null
+
+                if (pendingUris.isNotEmpty()) {
+                    val intentSender = photoMoverService?.createDeleteRequestIntentSender(pendingUris.distinct())
+                    if (intentSender != null) {
+                        _pendingDeleteIntentSender.value = intentSender
+                    }
+                }
 
                 val updatedEvent = existingEvent.copy(
                     vehicleId = vehicleId,

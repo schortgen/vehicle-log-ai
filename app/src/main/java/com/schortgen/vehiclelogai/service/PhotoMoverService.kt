@@ -1,7 +1,10 @@
 package com.schortgen.vehiclelogai.service
 
+import android.app.RecoverableSecurityException
 import android.content.Context
+import android.content.IntentSender
 import android.net.Uri
+import android.os.Build
 import android.os.Environment
 import android.provider.MediaStore
 import androidx.documentfile.provider.DocumentFile
@@ -11,6 +14,11 @@ import java.io.File
 import java.io.FileInputStream
 import java.io.FileOutputStream
 
+data class PhotoMoveResult(
+    val newPath: String,
+    val pendingDeleteUri: Uri? = null
+)
+
 class PhotoMoverService(
     private val context: Context,
     private val settingsRepository: SettingsRepository
@@ -19,25 +27,25 @@ class PhotoMoverService(
     /**
      * Moves a photo at [photoPath] to the user's configured destination folder
      * if photo moving is enabled in settings.
-     * Returns the new path/URI string if moved, or the original [photoPath] if not moved.
+     * Returns a [PhotoMoveResult] containing the new path and any URI requiring system delete permission.
      */
-    fun movePhotoIfEnabled(photoPath: String?): String? {
-        if (photoPath.isNullOrBlank()) return photoPath
+    fun movePhotoIfEnabled(photoPath: String?): PhotoMoveResult {
+        if (photoPath.isNullOrBlank()) return PhotoMoveResult(photoPath ?: "")
 
         val moveEnabled = settingsRepository.getMovePhotosOnComplete()
-        if (!moveEnabled) return photoPath
+        if (!moveEnabled) return PhotoMoveResult(photoPath)
 
         val targetFolderUri = settingsRepository.getCompletedPhotosFolderUri()
         return movePhoto(photoPath, targetFolderUri)
     }
 
-    fun movePhoto(photoPath: String, targetFolderUri: String?): String {
+    fun movePhoto(photoPath: String, targetFolderUri: String?): PhotoMoveResult {
         try {
             val fileName = extractFileName(photoPath)
 
             if (!originalExists(photoPath)) {
                 DiagnosticLogger.w("PhotoMover", "Original photo does not exist or already moved: $photoPath")
-                return photoPath
+                return PhotoMoveResult(photoPath)
             }
 
             // 1. If targetFolderUri is a SAF tree URI
@@ -52,7 +60,7 @@ class PhotoMoverService(
                     if (destFile != null) {
                         if (destFile.uri.toString() == photoPath) {
                             DiagnosticLogger.i("PhotoMover", "Photo $photoPath is already in target directory")
-                            return photoPath
+                            return PhotoMoveResult(photoPath)
                         }
 
                         val copySuccess = try {
@@ -68,9 +76,12 @@ class PhotoMoverService(
                         }
 
                         if (copySuccess) {
-                            deleteOriginal(photoPath)
-                            DiagnosticLogger.i("PhotoMover", "Moved photo $photoPath to SAF tree ${destFile.uri}")
-                            return destFile.uri.toString()
+                            val deleted = deleteOriginal(photoPath)
+                            val pendingDeleteUri = if (!deleted && photoPath.startsWith("content://")) {
+                                try { Uri.parse(photoPath) } catch (_: Exception) { null }
+                            } else null
+                            DiagnosticLogger.i("PhotoMover", "Copied photo $photoPath to SAF tree ${destFile.uri}, deletedOriginal=$deleted")
+                            return PhotoMoveResult(destFile.uri.toString(), pendingDeleteUri)
                         }
                     }
                 }
@@ -88,7 +99,7 @@ class PhotoMoverService(
 
             if (destFile.absolutePath == cleanPhotoPath) {
                 DiagnosticLogger.i("PhotoMover", "Photo $photoPath is already at destination ${destFile.absolutePath}")
-                return destFile.absolutePath
+                return PhotoMoveResult(destFile.absolutePath)
             }
 
             if (destFile.exists()) {
@@ -110,16 +121,47 @@ class PhotoMoverService(
             }
 
             if (copySuccess) {
-                deleteOriginal(photoPath)
-                DiagnosticLogger.i("PhotoMover", "Moved photo $photoPath to local path ${destFile.absolutePath}")
-                return destFile.absolutePath
+                val deleted = deleteOriginal(photoPath)
+                val pendingDeleteUri = if (!deleted && photoPath.startsWith("content://")) {
+                    try { Uri.parse(photoPath) } catch (_: Exception) { null }
+                } else null
+                DiagnosticLogger.i("PhotoMover", "Copied photo $photoPath to local path ${destFile.absolutePath}, deletedOriginal=$deleted")
+                return PhotoMoveResult(destFile.absolutePath, pendingDeleteUri)
             }
 
-            return photoPath
+            return PhotoMoveResult(photoPath)
 
         } catch (e: Exception) {
             DiagnosticLogger.e("PhotoMover", "Failed to move photo $photoPath", e)
-            return photoPath
+            return PhotoMoveResult(photoPath)
+        }
+    }
+
+    /**
+     * Creates an [IntentSender] for system confirmation dialog to delete URIs that could not be deleted directly.
+     */
+    fun createDeleteRequestIntentSender(uris: List<Uri>): IntentSender? {
+        val validUris = uris.filter { it.toString().startsWith("content://") }
+        if (validUris.isEmpty()) return null
+        return try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                val pendingIntent = MediaStore.createDeleteRequest(context.contentResolver, validUris)
+                pendingIntent.intentSender
+            } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                for (uri in validUris) {
+                    try {
+                        context.contentResolver.delete(uri, null, null)
+                    } catch (rse: RecoverableSecurityException) {
+                        return rse.userAction.actionIntent.intentSender
+                    }
+                }
+                null
+            } else {
+                null
+            }
+        } catch (e: Exception) {
+            DiagnosticLogger.e("PhotoMover", "Failed to create delete request intent sender", e)
+            null
         }
     }
 
@@ -147,7 +189,7 @@ class PhotoMoverService(
         null
     }
 
-    private fun deleteOriginal(photoPath: String) {
+    private fun deleteOriginal(photoPath: String): Boolean {
         var deleted = false
         val uri = try { Uri.parse(photoPath) } catch (_: Exception) { null }
 
@@ -211,6 +253,7 @@ class PhotoMoverService(
         } else {
             DiagnosticLogger.w("PhotoMover", "Could not delete original photo at $photoPath")
         }
+        return deleted
     }
 
     private fun extractFileName(photoPath: String): String {
