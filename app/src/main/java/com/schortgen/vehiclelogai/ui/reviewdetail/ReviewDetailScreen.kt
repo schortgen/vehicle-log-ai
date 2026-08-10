@@ -17,8 +17,10 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.filled.Calculate
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Warning
+import java.util.Locale
 import com.schortgen.vehiclelogai.data.repository.PreferredTripMeter
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -611,7 +613,17 @@ fun ReviewDetailScreen(
                             isPricePerGallonEdited = (it != initialPricePerGallon)
                         },
                         detected = parsedCandidate?.pricePerGallon != null,
-                        isEdited = isPricePerGallonEdited
+                        isEdited = isPricePerGallonEdited,
+                        onCalculateClick = {
+                            val total = totalCost.replace("$", "").replace(",", "").trim().toDoubleOrNull()
+                            val gal = gallons.replace(",", "").trim().toDoubleOrNull()
+                            if (total != null && gal != null && gal > 0) {
+                                val calculated = total / gal
+                                pricePerGallon = String.format(Locale.US, "%.3f", calculated)
+                                isPricePerGallonEdited = (pricePerGallon != initialPricePerGallon)
+                            }
+                        },
+                        calculateLabel = "Calc ($/gal)"
                     )
 
                     SuggestedValueField(
@@ -622,7 +634,17 @@ fun ReviewDetailScreen(
                             isTotalCostEdited = (it != initialTotalCost)
                         },
                         detected = parsedCandidate?.totalCost != null,
-                        isEdited = isTotalCostEdited
+                        isEdited = isTotalCostEdited,
+                        onCalculateClick = {
+                            val ppg = pricePerGallon.replace("$", "").replace(",", "").trim().toDoubleOrNull()
+                            val gal = gallons.replace(",", "").trim().toDoubleOrNull()
+                            if (ppg != null && gal != null && gal > 0) {
+                                val calculated = gal * ppg
+                                totalCost = String.format(Locale.US, "%.2f", calculated)
+                                isTotalCostEdited = (totalCost != initialTotalCost)
+                            }
+                        },
+                        calculateLabel = "Calc (gal × $/gal)"
                     )
 
                     SuggestedValueField(
@@ -1107,7 +1129,9 @@ private fun SuggestedValueField(
     value: String,
     onValueChange: (String) -> Unit,
     detected: Boolean,
-    isEdited: Boolean = false
+    isEdited: Boolean = false,
+    onCalculateClick: (() -> Unit)? = null,
+    calculateLabel: String? = null
 ) {
     Column(modifier = Modifier.fillMaxWidth()) {
         Box(
@@ -1116,44 +1140,105 @@ private fun SuggestedValueField(
             OutlinedTextField(
                 value = value,
                 onValueChange = onValueChange,
-                label = { Text(label) },
+                label = {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        modifier = if (onCalculateClick != null) {
+                            Modifier.clickable { onCalculateClick() }
+                        } else Modifier
+                    ) {
+                        Text(label)
+                        if (onCalculateClick != null) {
+                            Icon(
+                                imageVector = Icons.Default.Calculate,
+                                contentDescription = calculateLabel ?: "Calculate",
+                                modifier = Modifier.size(16.dp),
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                    }
+                },
+                trailingIcon = if (onCalculateClick != null) {
+                    {
+                        IconButton(onClick = onCalculateClick) {
+                            Icon(
+                                imageVector = Icons.Default.Calculate,
+                                contentDescription = calculateLabel ?: "Calculate $label",
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                    }
+                } else null,
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(8.dp),
                 singleLine = true
             )
 
-            val badgeText = when {
-                isEdited -> "User edit"
-                detected -> "Detected"
-                else -> "Not found"
-            }
-
-            val badgeBgColor = when {
-                isEdited -> Color(0xFFE3F2FD)
-                detected -> Color(0xFFE8F5E9)
-                else -> Color(0xFFFCE4EC)
-            }
-
-            val badgeTextColor = when {
-                isEdited -> Color(0xFF1565C0)
-                detected -> Color(0xFF2E7D32)
-                else -> Color(0xFFC62828)
-            }
-
-            Surface(
+            Row(
                 modifier = Modifier
                     .align(Alignment.TopEnd)
-                    .padding(top = 8.dp, end = 12.dp),
-                shape = RoundedCornerShape(12.dp),
-                color = badgeBgColor
+                    .padding(top = 8.dp, end = if (onCalculateClick != null) 48.dp else 12.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(
-                    text = badgeText,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = badgeTextColor,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                )
+                if (onCalculateClick != null) {
+                    Surface(
+                        modifier = Modifier.clickable { onCalculateClick() },
+                        shape = RoundedCornerShape(12.dp),
+                        color = MaterialTheme.colorScheme.primaryContainer
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(2.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Calculate,
+                                contentDescription = null,
+                                modifier = Modifier.size(12.dp),
+                                tint = MaterialTheme.colorScheme.onPrimaryContainer
+                            )
+                            Text(
+                                text = calculateLabel ?: "Calc",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+                }
+
+                val badgeText = when {
+                    isEdited -> "User edit"
+                    detected -> "Detected"
+                    else -> "Not found"
+                }
+
+                val badgeBgColor = when {
+                    isEdited -> Color(0xFFE3F2FD)
+                    detected -> Color(0xFFE8F5E9)
+                    else -> Color(0xFFFCE4EC)
+                }
+
+                val badgeTextColor = when {
+                    isEdited -> Color(0xFF1565C0)
+                    detected -> Color(0xFF2E7D32)
+                    else -> Color(0xFFC62828)
+                }
+
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = badgeBgColor
+                ) {
+                    Text(
+                        text = badgeText,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = badgeTextColor,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                    )
+                }
             }
         }
 
