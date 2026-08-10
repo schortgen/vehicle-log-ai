@@ -42,7 +42,7 @@ interface EventDao {
     @Query("SELECT COALESCE(AVG(totalCost), 0) FROM events WHERE eventType = 'FUEL' AND totalCost IS NOT NULL")
     suspend fun averageFuelCost(): Double
 
-    @Query("SELECT * FROM events ORDER BY eventDate DESC LIMIT 5")
+    @Query("SELECT * FROM events ORDER BY eventDate DESC, id DESC LIMIT 5")
     suspend fun getRecentEvents(): List<Event>
 
     @Query("SELECT * FROM events WHERE vehicleId = :vehicleId AND eventType = 'FUEL' ORDER BY eventDate DESC LIMIT 1")
