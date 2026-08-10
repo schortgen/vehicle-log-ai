@@ -23,10 +23,10 @@ interface EventDao {
     @Query("SELECT * FROM events WHERE id = :id")
     suspend fun getById(id: Long): Event?
 
-    @Query("SELECT * FROM events ORDER BY eventDate DESC")
+    @Query("SELECT * FROM events ORDER BY eventDate DESC, id DESC")
     fun observeAll(): Flow<List<Event>>
 
-    @Query("SELECT * FROM events WHERE vehicleId = :vehicleId ORDER BY eventDate DESC")
+    @Query("SELECT * FROM events WHERE vehicleId = :vehicleId ORDER BY eventDate DESC, id DESC")
     fun observeEventsForVehicle(vehicleId: Long): Flow<List<Event>>
 
     // Dashboard aggregate queries

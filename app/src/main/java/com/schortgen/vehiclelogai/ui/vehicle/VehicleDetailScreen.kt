@@ -31,6 +31,9 @@ fun VehicleDetailScreen(
 ) {
     var vehicle by remember { mutableStateOf<Vehicle?>(null) }
     val events by eventViewModel.observeEventsForVehicle(vehicleId).collectAsState(initial = emptyList())
+    val sortedEvents = remember(events) {
+        events.sortedWith(compareByDescending<com.schortgen.vehiclelogai.data.models.Event> { it.eventDate }.thenByDescending { it.id })
+    }
 
     val dateFormat = remember { SimpleDateFormat("MMM dd, yyyy HH:mm", Locale.getDefault()) }
 
@@ -117,7 +120,7 @@ fun VehicleDetailScreen(
                     )
                 }
 
-                if (events.isEmpty()) {
+                if (sortedEvents.isEmpty()) {
                     item {
                         Card(modifier = Modifier.fillMaxWidth()) {
                             Box(
@@ -135,7 +138,7 @@ fun VehicleDetailScreen(
                         }
                     }
                 } else {
-                    items(events) { event ->
+                    items(sortedEvents) { event ->
                         TimelineCard(
                             event = event,
                             dateFormat = dateFormat,

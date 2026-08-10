@@ -58,7 +58,7 @@ fun TimelineScreen(
                 vehName.contains(q) || loc.contains(q) || notes.contains(q) || typeStr.contains(q)
             }
             matchesVehicle && matchesType && matchesSearch
-        }
+        }.sortedWith(compareByDescending<Event> { it.eventDate }.thenByDescending { it.id })
     }
 
     Scaffold(
