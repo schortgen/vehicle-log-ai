@@ -40,3 +40,26 @@ data class Event(
     val location: String? = null,
     val photoPath: String? = null
 )
+
+fun Event.calculateMpg(allEvents: List<Event> = emptyList()): Double? {
+    if (eventType != EventType.FUEL) return null
+    val gal = gallons ?: return null
+    if (gal <= 0) return null
+
+    if (tripDistance != null && tripDistance > 0) {
+        return tripDistance / gal
+    }
+
+    if (odometer != null && vehicleId != null && allEvents.isNotEmpty()) {
+        val prevFuelEvent = allEvents
+            .filter { it.vehicleId == vehicleId && it.eventType == EventType.FUEL && it.odometer != null }
+            .filter { it.eventDate < eventDate || (it.eventDate == eventDate && it.id < id) }
+            .maxByOrNull { it.eventDate }
+        if (prevFuelEvent?.odometer != null && odometer > prevFuelEvent.odometer) {
+            val trip = (odometer - prevFuelEvent.odometer).toDouble()
+            return trip / gal
+        }
+    }
+    return null
+}
+

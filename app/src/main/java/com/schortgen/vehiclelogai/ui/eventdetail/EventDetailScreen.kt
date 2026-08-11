@@ -17,6 +17,7 @@ import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import com.schortgen.vehiclelogai.data.models.Event
 import com.schortgen.vehiclelogai.data.models.EventType
+import com.schortgen.vehiclelogai.data.models.calculateMpg
 import com.schortgen.vehiclelogai.ui.events.EventViewModel
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
@@ -346,6 +347,7 @@ fun EventDetailScreen(
                                 ev.odometer?.let { EventDetailRow("Odometer", "$it mi") }
                                 ev.tripDistance?.let { EventDetailRow("Trip Distance", "%.1f mi".format(it)) }
                                 ev.gallons?.let { EventDetailRow("Gallons", "%.2f".format(it)) }
+                                ev.calculateMpg()?.let { EventDetailRow("Calculated MPG", "%.2f".format(it)) }
                                 ev.pricePerGallon?.let { EventDetailRow("Price/Gal", "$${"%.3f".format(it)}") }
                                 ev.totalCost?.let { EventDetailRow("Total Cost", "$${"%.2f".format(it)}") }
                                 ev.location?.let { EventDetailRow("Station", it) }

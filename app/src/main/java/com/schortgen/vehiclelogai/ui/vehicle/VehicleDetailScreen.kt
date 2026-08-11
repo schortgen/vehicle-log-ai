@@ -14,6 +14,7 @@ import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import com.schortgen.vehiclelogai.data.models.EventType
 import com.schortgen.vehiclelogai.data.models.Vehicle
+import com.schortgen.vehiclelogai.data.models.calculateMpg
 import com.schortgen.vehiclelogai.navigation.Screen
 import com.schortgen.vehiclelogai.ui.events.EventViewModel
 import com.schortgen.vehiclelogai.ui.vehicles.VehicleViewModel
@@ -141,6 +142,7 @@ fun VehicleDetailScreen(
                     items(sortedEvents) { event ->
                         TimelineCard(
                             event = event,
+                            allEvents = sortedEvents,
                             dateFormat = dateFormat,
                             onClick = {
                                 navController.navigate(Screen.EventDetail.createRoute(event.id))
@@ -161,6 +163,7 @@ fun VehicleDetailScreen(
 @Composable
 private fun TimelineCard(
     event: com.schortgen.vehiclelogai.data.models.Event,
+    allEvents: List<com.schortgen.vehiclelogai.data.models.Event> = emptyList(),
     dateFormat: SimpleDateFormat,
     onClick: () -> Unit
 ) {
@@ -222,6 +225,7 @@ private fun TimelineCard(
                 when (event.eventType) {
                     EventType.FUEL -> {
                         if (event.gallons != null || event.totalCost != null) {
+                            val mpg = event.calculateMpg(allEvents)
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.SpaceBetween
@@ -229,6 +233,12 @@ private fun TimelineCard(
                                 Column {
                                     event.gallons?.let {
                                         Text("${"%.2f".format(it)} gal", style = MaterialTheme.typography.bodySmall)
+                                    }
+                                    event.tripDistance?.let {
+                                        Text("${"%.1f".format(it)} trip mi", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    }
+                                    mpg?.let {
+                                        Text("${"%.2f".format(it)} MPG", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.primary)
                                     }
                                     event.odometer?.let {
                                         Text("${it} mi", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)

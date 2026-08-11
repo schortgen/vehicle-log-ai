@@ -212,6 +212,7 @@ fun TimelineScreen(
                         }
                         TimelineEventCard(
                             event = event,
+                            allEvents = events,
                             vehicleName = vehicleName,
                             dateFormat = dateFormat,
                             onClick = {
@@ -228,6 +229,7 @@ fun TimelineScreen(
 @Composable
 private fun TimelineEventCard(
     event: Event,
+    allEvents: List<Event> = emptyList(),
     vehicleName: String?,
     dateFormat: SimpleDateFormat,
     onClick: () -> Unit
@@ -305,6 +307,7 @@ private fun TimelineEventCard(
 
                 when (event.eventType) {
                     EventType.FUEL -> {
+                        val mpg = event.calculateMpg(allEvents)
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween
@@ -315,6 +318,9 @@ private fun TimelineEventCard(
                                 }
                                 event.tripDistance?.let {
                                     Text("${"%.1f".format(it)} trip mi", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                }
+                                mpg?.let {
+                                    Text("${"%.2f".format(it)} MPG", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.primary)
                                 }
                                 event.odometer?.let {
                                     Text("${it} mi", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
