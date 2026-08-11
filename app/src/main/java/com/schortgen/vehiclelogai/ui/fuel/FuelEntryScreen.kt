@@ -84,6 +84,9 @@ fun FuelEntryScreen(
 
     // Save state
     var isSaving by remember { mutableStateOf(false) }
+    var pendingEventToSave by remember { mutableStateOf<Event?>(null) }
+    var warningMessageToDisplay by remember { mutableStateOf<String?>(null) }
+    val scope = rememberCoroutineScope()
 
     val dateFormat = remember { SimpleDateFormat("MMM dd, yyyy", Locale.getDefault()) }
 
@@ -162,10 +165,15 @@ fun FuelEntryScreen(
         return isValid
     }
 
+    fun performSave(event: Event) {
+        isSaving = true
+        eventViewModel.addEvent(event)
+        navController.popBackStack()
+    }
+
     fun saveFuelEntry() {
         if (!validate()) return
 
-        isSaving = true
         val event = Event(
             vehicleId = vehicleId,
             eventType = EventType.FUEL,
@@ -178,8 +186,51 @@ fun FuelEntryScreen(
             location = gasStationText.ifBlank { null },
             notes = notesText.ifBlank { null }
         )
-        eventViewModel.addEvent(event)
-        navController.popBackStack()
+
+        scope.launch {
+            val warning = eventViewModel.checkPreviousEventWarnings(event)
+            if (warning != null) {
+                pendingEventToSave = event
+                warningMessageToDisplay = warning
+            } else {
+                performSave(event)
+            }
+        }
+    }
+
+    if (warningMessageToDisplay != null && pendingEventToSave != null) {
+        AlertDialog(
+            onDismissRequest = {
+                warningMessageToDisplay = null
+                pendingEventToSave = null
+            },
+            title = { Text("Warning") },
+            text = { Text(warningMessageToDisplay!!) },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        val evt = pendingEventToSave
+                        warningMessageToDisplay = null
+                        pendingEventToSave = null
+                        if (evt != null) {
+                            performSave(evt)
+                        }
+                    }
+                ) {
+                    Text("Save Anyway")
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        warningMessageToDisplay = null
+                        pendingEventToSave = null
+                    }
+                ) {
+                    Text("Cancel")
+                }
+            }
+        )
     }
 
     // Date picker dialog

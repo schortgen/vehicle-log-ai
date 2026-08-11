@@ -29,6 +29,9 @@ interface EventDao {
     @Query("SELECT * FROM events WHERE vehicleId = :vehicleId ORDER BY eventDate DESC, id DESC")
     fun observeEventsForVehicle(vehicleId: Long): Flow<List<Event>>
 
+    @Query("SELECT * FROM events WHERE vehicleId = :vehicleId ORDER BY eventDate DESC, id DESC")
+    suspend fun getEventsForVehicle(vehicleId: Long): List<Event>
+
     // Dashboard aggregate queries
     @Query("SELECT COUNT(*) FROM events WHERE eventType = 'FUEL' AND eventDate >= :startOfMonth AND eventDate < :startOfNextMonth")
     suspend fun countFuelPurchasesThisMonth(startOfMonth: Long, startOfNextMonth: Long): Int

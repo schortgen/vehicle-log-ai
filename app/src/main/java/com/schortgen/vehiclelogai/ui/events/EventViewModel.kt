@@ -9,6 +9,9 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.launch
 
 import com.schortgen.vehiclelogai.data.repository.VehicleRepository
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 class EventViewModel(
     private val repository: EventRepository,
@@ -55,6 +58,36 @@ class EventViewModel(
 
     suspend fun getLastFuelEvent(vehicleId: Long): Event? {
         return repository.getLastFuelEvent(vehicleId)
+    }
+
+    suspend fun checkPreviousEventWarnings(event: Event): String? {
+        val vehicleId = event.vehicleId ?: return null
+        val existingEvents = repository.getEventsForVehicle(vehicleId)
+        val otherEvents = existingEvents.filter { it.id != event.id }
+        if (otherEvents.isEmpty()) return null
+
+        val warnings = mutableListOf<String>()
+        val dateFormat = SimpleDateFormat("MMM dd, yyyy", Locale.getDefault())
+
+        val latestEvent = otherEvents.maxByOrNull { it.eventDate }
+        if (latestEvent != null && latestEvent.eventDate > event.eventDate) {
+            val latestDateStr = dateFormat.format(Date(latestEvent.eventDate))
+            val currDateStr = dateFormat.format(Date(event.eventDate))
+            warnings.add("The previous event date ($latestDateStr) is newer than the current date ($currDateStr).")
+        }
+
+        val priorEvent = otherEvents.filter { it.eventDate <= event.eventDate }.maxByOrNull { it.eventDate }
+        if (priorEvent != null && priorEvent.odometer != null && event.odometer != null) {
+            if (priorEvent.odometer!! > event.odometer!!) {
+                val priorDateStr = dateFormat.format(Date(priorEvent.eventDate))
+                warnings.add("The previous event odometer (${priorEvent.odometer} mi on $priorDateStr) is higher than the current odometer (${event.odometer} mi).")
+            }
+        } else if (latestEvent != null && latestEvent.odometer != null && event.odometer != null && latestEvent.odometer!! > event.odometer!!) {
+            val latestDateStr = dateFormat.format(Date(latestEvent.eventDate))
+            warnings.add("An existing event odometer (${latestEvent.odometer} mi on $latestDateStr) is higher than the current odometer (${event.odometer} mi).")
+        }
+
+        return if (warnings.isNotEmpty()) warnings.joinToString("\n\n") else null
     }
 }
 

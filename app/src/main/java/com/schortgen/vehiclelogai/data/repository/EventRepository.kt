@@ -1,4 +1,4 @@
-﻿package com.schortgen.vehiclelogai.data.repository
+package com.schortgen.vehiclelogai.data.repository
 
 import com.schortgen.vehiclelogai.data.local.dao.EventDao
 import com.schortgen.vehiclelogai.data.models.Event
@@ -33,6 +33,10 @@ class EventRepository(
 
     fun observeEventsForVehicle(vehicleId: Long): Flow<List<Event>> {
         return eventDao.observeEventsForVehicle(vehicleId)
+    }
+
+    suspend fun getEventsForVehicle(vehicleId: Long): List<Event> {
+        return eventDao.getEventsForVehicle(vehicleId)
     }
 
     // Dashboard aggregate methods

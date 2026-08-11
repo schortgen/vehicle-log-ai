@@ -45,6 +45,63 @@ fun EventDetailScreen(
     var selectedDateMillis by remember { mutableLongStateOf(System.currentTimeMillis()) }
     var showDatePicker by remember { mutableStateOf(false) }
 
+    var pendingEventToUpdate by remember { mutableStateOf<Event?>(null) }
+    var warningMessageToDisplay by remember { mutableStateOf<String?>(null) }
+    val scope = rememberCoroutineScope()
+
+    fun performUpdate(updated: Event) {
+        eventViewModel.updateEvent(updated)
+        event = updated
+        isEditing = false
+    }
+
+    fun saveUpdatedEvent(updated: Event) {
+        scope.launch {
+            val warning = eventViewModel.checkPreviousEventWarnings(updated)
+            if (warning != null) {
+                pendingEventToUpdate = updated
+                warningMessageToDisplay = warning
+            } else {
+                performUpdate(updated)
+            }
+        }
+    }
+
+    if (warningMessageToDisplay != null && pendingEventToUpdate != null) {
+        AlertDialog(
+            onDismissRequest = {
+                warningMessageToDisplay = null
+                pendingEventToUpdate = null
+            },
+            title = { Text("Warning") },
+            text = { Text(warningMessageToDisplay!!) },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        val evt = pendingEventToUpdate
+                        warningMessageToDisplay = null
+                        pendingEventToUpdate = null
+                        if (evt != null) {
+                            performUpdate(evt)
+                        }
+                    }
+                ) {
+                    Text("Save Anyway")
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        warningMessageToDisplay = null
+                        pendingEventToUpdate = null
+                    }
+                ) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+
     // Load event
     LaunchedEffect(eventId) {
         event = eventViewModel.getEventById(eventId)
@@ -366,9 +423,7 @@ fun EventDetailScreen(
                                         totalCost = editTotalCost.toDoubleOrNull() ?: ev.totalCost,
                                         location = editLocation.ifBlank { ev.location }
                                     )
-                                    eventViewModel.updateEvent(updated)
-                                    event = updated
-                                    isEditing = false
+                                    saveUpdatedEvent(updated)
                                 },
                                 modifier = Modifier.fillMaxWidth()
                             ) {
@@ -404,9 +459,7 @@ fun EventDetailScreen(
                                         totalCost = editTotalCost.toDoubleOrNull() ?: ev.totalCost,
                                         location = editLocation.ifBlank { null }
                                     )
-                                    eventViewModel.updateEvent(updated)
-                                    event = updated
-                                    isEditing = false
+                                    saveUpdatedEvent(updated)
                                 },
                                 modifier = Modifier.fillMaxWidth()
                             ) {
