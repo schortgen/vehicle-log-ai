@@ -1,20 +1,30 @@
 package com.schortgen.vehiclelogai.ui.eventdetail
 
+import android.net.Uri
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.navigation.NavController
+import coil.compose.AsyncImage
+import coil.request.ImageRequest
 import com.schortgen.vehiclelogai.data.models.Event
 import com.schortgen.vehiclelogai.data.models.EventType
 import com.schortgen.vehiclelogai.data.models.calculateMpg
@@ -35,6 +45,7 @@ fun EventDetailScreen(
 ) {
     var event by remember { mutableStateOf<Event?>(null) }
     var isEditing by remember { mutableStateOf(false) }
+    var showImageDialog by remember { mutableStateOf(false) }
     val dateFormat = remember { SimpleDateFormat("MMM dd, yyyy HH:mm", Locale.getDefault()) }
 
     // Editable fields
@@ -371,19 +382,42 @@ fun EventDetailScreen(
                                 fontWeight = FontWeight.Bold
                             )
                             Spacer(modifier = Modifier.height(8.dp))
-                            ev.photoPath?.let {
-                                Text(
-                                    text = "📷 Photo attached",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
                             ev.notes?.let { notes ->
                                 if (notes.contains("OCR:") || notes.contains("Source:") || notes.contains("Confidence:")) {
                                     Text(
                                         text = "📄 Imported from receipt",
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                }
+                            }
+                            ev.photoPath?.takeIf { it.isNotBlank() }?.let { path ->
+                                Text(
+                                    text = "📷 Attached Photo (tap to view full image):",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Spacer(modifier = Modifier.height(8.dp))
+                                val data = if (path.startsWith("content://") || path.startsWith("file://")) Uri.parse(path) else path
+                                val model = ImageRequest.Builder(context)
+                                    .data(data)
+                                    .crossfade(true)
+                                    .build()
+
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(180.dp)
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .clickable { showImageDialog = true },
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    AsyncImage(
+                                        model = model,
+                                        contentDescription = "Event photo",
+                                        contentScale = ContentScale.Crop,
+                                        modifier = Modifier.fillMaxSize()
                                     )
                                 }
                             }
@@ -468,6 +502,51 @@ fun EventDetailScreen(
                             ) {
                                 Text("Delete Event")
                             }
+                        }
+                    }
+                }
+            }
+        }
+
+        if (showImageDialog && event?.photoPath.isNullOrBlank() == false) {
+            val photoPath = event!!.photoPath!!
+            val data = if (photoPath.startsWith("content://") || photoPath.startsWith("file://")) Uri.parse(photoPath) else photoPath
+            val model = ImageRequest.Builder(context)
+                .data(data)
+                .build()
+
+            Dialog(
+                onDismissRequest = { showImageDialog = false },
+                properties = DialogProperties(usePlatformDefaultWidth = false)
+            ) {
+                Surface(
+                    modifier = Modifier.fillMaxSize(),
+                    color = MaterialTheme.colorScheme.surface.copy(alpha = 0.95f)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .clickable { showImageDialog = false },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        AsyncImage(
+                            model = model,
+                            contentDescription = "Full Size Event Photo",
+                            contentScale = ContentScale.Fit,
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(16.dp)
+                        )
+                        IconButton(
+                            onClick = { showImageDialog = false },
+                            modifier = Modifier
+                                .align(Alignment.TopEnd)
+                                .padding(16.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Close,
+                                contentDescription = "Close"
+                            )
                         }
                     }
                 }
