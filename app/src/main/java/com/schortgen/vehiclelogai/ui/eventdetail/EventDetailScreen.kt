@@ -3,12 +3,15 @@ package com.schortgen.vehiclelogai.ui.eventdetail
 import android.net.Uri
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -25,6 +28,7 @@ import androidx.compose.ui.window.DialogProperties
 import androidx.navigation.NavController
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
+import com.schortgen.vehiclelogai.VehicleLogAIApplication
 import com.schortgen.vehiclelogai.data.models.Event
 import com.schortgen.vehiclelogai.data.models.EventType
 import com.schortgen.vehiclelogai.data.models.calculateMpg
@@ -46,7 +50,35 @@ fun EventDetailScreen(
     var event by remember { mutableStateOf<Event?>(null) }
     var isEditing by remember { mutableStateOf(false) }
     var showImageDialog by remember { mutableStateOf(false) }
+    var selectedPhotoIndex by remember { mutableIntStateOf(0) }
     val dateFormat = remember { SimpleDateFormat("MMM dd, yyyy HH:mm", Locale.getDefault()) }
+
+    val context = LocalContext.current
+    val app = context.applicationContext as? VehicleLogAIApplication
+    val reviewItems by remember(eventId, app) {
+        app?.reviewItemRepository?.observeByEvent(eventId) ?: kotlinx.coroutines.flow.flowOf(emptyList())
+    }.collectAsState(initial = emptyList())
+
+    val photoPaths = remember(event, reviewItems) {
+        val list = mutableListOf<String>()
+        reviewItems.forEach { item ->
+            val path = item.photoPath
+            if (!path.isNullOrBlank() && !list.contains(path)) {
+                list.add(path)
+            }
+        }
+        event?.photoPath?.let { path ->
+            if (path.isNotBlank()) {
+                val splitPaths = path.split(',', '|', '\n').map { it.trim() }.filter { it.isNotBlank() }
+                splitPaths.forEach { sp ->
+                    if (!list.contains(sp)) {
+                        list.add(sp)
+                    }
+                }
+            }
+        }
+        list
+    }
 
     // Editable fields
     var editNotes by remember { mutableStateOf("") }
@@ -367,13 +399,15 @@ fun EventDetailScreen(
                             }
                             EventDetailRow("Created", dateFormat.format(Date(ev.createdDate)))
                             EventDetailRow("Confidence", ev.confidence?.let { "${(it * 100).toInt()}%" } ?: "N/A")
-                            ev.photoPath?.let { EventDetailRow("Photo", "Attached") }
+                            if (photoPaths.isNotEmpty()) {
+                                EventDetailRow("Photos", "${photoPaths.size} Attached")
+                            }
                         }
                     }
                 }
 
                 // Traceability card
-                if (!ev.photoPath.isNullOrBlank() || !ev.notes.isNullOrBlank()) {
+                if (photoPaths.isNotEmpty() || !ev.notes.isNullOrBlank()) {
                     Card(modifier = Modifier.fillMaxWidth()) {
                         Column(modifier = Modifier.padding(16.dp)) {
                             Text(
@@ -392,33 +426,72 @@ fun EventDetailScreen(
                                     Spacer(modifier = Modifier.height(8.dp))
                                 }
                             }
-                            ev.photoPath?.takeIf { it.isNotBlank() }?.let { path ->
+                            if (photoPaths.isNotEmpty()) {
+                                val labelText = if (photoPaths.size == 1) "📷 Attached Photo (tap to view full image):" else "📷 Attached Photos (${photoPaths.size}) (tap to view full image):"
                                 Text(
-                                    text = "📷 Attached Photo (tap to view full image):",
+                                    text = labelText,
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                                 Spacer(modifier = Modifier.height(8.dp))
-                                val data = if (path.startsWith("content://") || path.startsWith("file://")) Uri.parse(path) else path
-                                val model = ImageRequest.Builder(context)
-                                    .data(data)
-                                    .crossfade(true)
-                                    .build()
 
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .height(180.dp)
-                                        .clip(RoundedCornerShape(8.dp))
-                                        .clickable { showImageDialog = true },
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    AsyncImage(
-                                        model = model,
-                                        contentDescription = "Event photo",
-                                        contentScale = ContentScale.Crop,
-                                        modifier = Modifier.fillMaxSize()
-                                    )
+                                if (photoPaths.size == 1) {
+                                    val path = photoPaths.first()
+                                    val data = if (path.startsWith("content://") || path.startsWith("file://")) Uri.parse(path) else path
+                                    val model = ImageRequest.Builder(context)
+                                        .data(data)
+                                        .crossfade(true)
+                                        .build()
+
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .height(180.dp)
+                                            .clip(RoundedCornerShape(8.dp))
+                                            .clickable {
+                                                selectedPhotoIndex = 0
+                                                showImageDialog = true
+                                            },
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        AsyncImage(
+                                            model = model,
+                                            contentDescription = "Event photo",
+                                            contentScale = ContentScale.Crop,
+                                            modifier = Modifier.fillMaxSize()
+                                        )
+                                    }
+                                } else {
+                                    LazyRow(
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        itemsIndexed(photoPaths) { index, path ->
+                                            val data = if (path.startsWith("content://") || path.startsWith("file://")) Uri.parse(path) else path
+                                            val model = ImageRequest.Builder(context)
+                                                .data(data)
+                                                .crossfade(true)
+                                                .build()
+
+                                            Box(
+                                                modifier = Modifier
+                                                    .size(140.dp)
+                                                    .clip(RoundedCornerShape(8.dp))
+                                                    .clickable {
+                                                        selectedPhotoIndex = index
+                                                        showImageDialog = true
+                                                    },
+                                                contentAlignment = Alignment.Center
+                                            ) {
+                                                AsyncImage(
+                                                    model = model,
+                                                    contentDescription = "Event photo ${index + 1}",
+                                                    contentScale = ContentScale.Crop,
+                                                    modifier = Modifier.fillMaxSize()
+                                                )
+                                            }
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -508,8 +581,9 @@ fun EventDetailScreen(
             }
         }
 
-        if (showImageDialog && event?.photoPath.isNullOrBlank() == false) {
-            val photoPath = event!!.photoPath!!
+        if (showImageDialog && photoPaths.isNotEmpty()) {
+            val safeIndex = selectedPhotoIndex.coerceIn(0, photoPaths.lastIndex)
+            val photoPath = photoPaths[safeIndex]
             val data = if (photoPath.startsWith("content://") || photoPath.startsWith("file://")) Uri.parse(photoPath) else photoPath
             val model = ImageRequest.Builder(context)
                 .data(data)
@@ -531,22 +605,87 @@ fun EventDetailScreen(
                     ) {
                         AsyncImage(
                             model = model,
-                            contentDescription = "Full Size Event Photo",
+                            contentDescription = "Full Size Event Photo ${safeIndex + 1}",
                             contentScale = ContentScale.Fit,
                             modifier = Modifier
                                 .fillMaxSize()
                                 .padding(16.dp)
                         )
-                        IconButton(
-                            onClick = { showImageDialog = false },
+
+                        Row(
                             modifier = Modifier
-                                .align(Alignment.TopEnd)
-                                .padding(16.dp)
+                                .align(Alignment.TopStart)
+                                .fillMaxWidth()
+                                .padding(16.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Icon(
-                                imageVector = Icons.Default.Close,
-                                contentDescription = "Close"
-                            )
+                            if (photoPaths.size > 1) {
+                                Surface(
+                                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.85f),
+                                    shape = RoundedCornerShape(16.dp)
+                                ) {
+                                    Text(
+                                        text = "Photo ${safeIndex + 1} of ${photoPaths.size}",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        fontWeight = FontWeight.Medium,
+                                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                                    )
+                                }
+                            } else {
+                                Spacer(modifier = Modifier.weight(1f))
+                            }
+
+                            IconButton(
+                                onClick = { showImageDialog = false }
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Close,
+                                    contentDescription = "Close"
+                                )
+                            }
+                        }
+
+                        if (photoPaths.size > 1) {
+                            IconButton(
+                                onClick = {
+                                    selectedPhotoIndex = if (safeIndex > 0) safeIndex - 1 else photoPaths.lastIndex
+                                },
+                                modifier = Modifier
+                                    .align(Alignment.CenterStart)
+                                    .padding(start = 16.dp)
+                            ) {
+                                Surface(
+                                    shape = RoundedCornerShape(24.dp),
+                                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.85f)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                                        contentDescription = "Previous photo",
+                                        modifier = Modifier.padding(8.dp)
+                                    )
+                                }
+                            }
+
+                            IconButton(
+                                onClick = {
+                                    selectedPhotoIndex = if (safeIndex < photoPaths.lastIndex) safeIndex + 1 else 0
+                                },
+                                modifier = Modifier
+                                    .align(Alignment.CenterEnd)
+                                    .padding(end = 16.dp)
+                            ) {
+                                Surface(
+                                    shape = RoundedCornerShape(24.dp),
+                                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.85f)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+                                        contentDescription = "Next photo",
+                                        modifier = Modifier.padding(8.dp)
+                                    )
+                                }
+                            }
                         }
                     }
                 }
