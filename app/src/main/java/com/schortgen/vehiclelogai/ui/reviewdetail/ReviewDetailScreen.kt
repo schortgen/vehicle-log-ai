@@ -979,24 +979,18 @@ fun ReviewDetailScreen(
     if (showAddPhotoDialog) {
         val ungroupedList = remember(reviewItems, groupItems, selectedUngroupedItems.toList()) {
             val baseItems = if (groupItems.isNotEmpty()) groupItems else listOfNotNull(activeItem ?: currentItem)
-            val available = reviewItems.filter { it.eventId == null && it !in groupItems }
+            val available = reviewItems.filter { it.eventId == null && it !in groupItems && it !in selectedUngroupedItems }
             if (baseItems.isEmpty()) {
-                (selectedUngroupedItems + available.filter { it !in selectedUngroupedItems }.take(2))
-                    .distinctBy { it.id }
-                    .sortedBy { it.captureDate }
+                available.take(2)
             } else {
                 val combinedItems = baseItems + selectedUngroupedItems
                 val minDate = combinedItems.minOf { it.captureDate }
                 val maxDate = combinedItems.maxOf { it.captureDate }
 
-                val unselectedAvailable = available.filter { it !in selectedUngroupedItems }
-                val photoBefore = unselectedAvailable.filter { it.captureDate <= minDate }.maxByOrNull { it.captureDate }
-                val photoAfter = unselectedAvailable.filter { it.captureDate >= maxDate }.minByOrNull { it.captureDate }
-                val photosBetween = unselectedAvailable.filter { it.captureDate in minDate..maxDate }
+                val photoBefore = available.filter { it.captureDate <= minDate }.maxByOrNull { it.captureDate }
+                val photoAfter = available.filter { it.captureDate >= maxDate }.minByOrNull { it.captureDate }
 
-                (selectedUngroupedItems + listOfNotNull(photoBefore, photoAfter) + photosBetween)
-                    .distinctBy { it.id }
-                    .sortedBy { it.captureDate }
+                listOfNotNull(photoBefore, photoAfter).distinctBy { it.id }.sortedBy { it.captureDate }
             }
         }
 
@@ -1031,10 +1025,10 @@ fun ReviewDetailScreen(
                         )
                         LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             items(ungroupedList) { uItem ->
-                                val isSelected = uItem in selectedUngroupedItems
                                 val baseItems = if (groupItems.isNotEmpty()) groupItems else listOfNotNull(activeItem ?: currentItem)
-                                val baseMinDate = baseItems.minOfOrNull { it.captureDate } ?: 0L
-                                val baseMaxDate = baseItems.maxOfOrNull { it.captureDate } ?: 0L
+                                val combinedItems = baseItems + selectedUngroupedItems
+                                val baseMinDate = combinedItems.minOfOrNull { it.captureDate } ?: 0L
+                                val baseMaxDate = combinedItems.maxOfOrNull { it.captureDate } ?: 0L
                                 val isBefore = if (baseMinDate > 0L && baseMaxDate > 0L) {
                                     if (uItem.captureDate <= baseMinDate) true
                                     else if (uItem.captureDate >= baseMaxDate) false
@@ -1048,14 +1042,9 @@ fun ReviewDetailScreen(
                                     modifier = Modifier
                                         .size(96.dp)
                                         .clickable {
-                                            if (isSelected) {
-                                                selectedUngroupedItems.remove(uItem)
-                                            } else {
-                                                selectedUngroupedItems.add(uItem)
-                                            }
+                                            selectedUngroupedItems.add(uItem)
                                         },
                                     shape = RoundedCornerShape(8.dp),
-                                    border = if (isSelected) BorderStroke(2.dp, MaterialTheme.colorScheme.primary) else null,
                                     color = MaterialTheme.colorScheme.surfaceVariant
                                 ) {
                                     val uPath = uItem.photoPath
@@ -1074,24 +1063,6 @@ fun ReviewDetailScreen(
                                             }
                                         }
 
-                                        if (isSelected) {
-                                            Surface(
-                                                modifier = Modifier
-                                                    .align(Alignment.TopEnd)
-                                                    .padding(4.dp)
-                                                    .size(24.dp),
-                                                shape = CircleShape,
-                                                color = MaterialTheme.colorScheme.primary
-                                            ) {
-                                                Icon(
-                                                    imageVector = Icons.Filled.Check,
-                                                    contentDescription = "Selected",
-                                                    tint = Color.White,
-                                                    modifier = Modifier.padding(4.dp)
-                                                )
-                                            }
-                                        }
-
                                         Surface(
                                             modifier = Modifier
                                                 .align(Alignment.BottomCenter)
@@ -1102,6 +1073,7 @@ fun ReviewDetailScreen(
                                                 text = labelText,
                                                 style = MaterialTheme.typography.labelSmall,
                                                 color = Color.White,
+                                                textAlign = TextAlign.Center,
                                                 modifier = Modifier.padding(vertical = 2.dp, horizontal = 4.dp)
                                             )
                                         }
@@ -1169,6 +1141,18 @@ fun ReviewDetailScreen(
                             }
 
                             items(selectedUngroupedItems) { uItem ->
+                                val baseItems = if (groupItems.isNotEmpty()) groupItems else listOfNotNull(activeItem ?: currentItem)
+                                val baseMinDate = baseItems.minOfOrNull { it.captureDate } ?: 0L
+                                val baseMaxDate = baseItems.maxOfOrNull { it.captureDate } ?: 0L
+                                val isBefore = if (baseMinDate > 0L && baseMaxDate > 0L) {
+                                    if (uItem.captureDate <= baseMinDate) true
+                                    else if (uItem.captureDate >= baseMaxDate) false
+                                    else uItem.captureDate < (baseMinDate + baseMaxDate) / 2
+                                } else {
+                                    true
+                                }
+                                val labelText = if (isBefore) "Earlier" else "Later"
+
                                 Box(
                                     modifier = Modifier
                                         .size(80.dp)
@@ -1212,7 +1196,7 @@ fun ReviewDetailScreen(
                                         color = Color.Black.copy(alpha = 0.6f)
                                     ) {
                                         Text(
-                                            text = "Adjacent",
+                                            text = labelText,
                                             style = MaterialTheme.typography.labelSmall,
                                             color = Color.White,
                                             fontSize = 9.sp,
