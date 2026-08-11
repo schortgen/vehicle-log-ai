@@ -174,6 +174,14 @@ fun ReviewDetailScreen(
     var isOdometerEdited by rememberSaveable(key = "isOdometerEdited_$reviewItemId") { mutableStateOf(false) }
     var isTripDistanceEdited by rememberSaveable(key = "isTripDistanceEdited_$reviewItemId") { mutableStateOf(false) }
 
+    val calculatedMpg = remember(tripDistance, gallons) {
+        val trip = tripDistance.replace(",", "").trim().toDoubleOrNull()
+        val gal = gallons.replace(",", "").trim().toDoubleOrNull()
+        if (trip != null && gal != null && gal > 0) {
+            String.format(Locale.US, "%.2f", trip / gal)
+        } else null
+    }
+
     val preferredTripMeter by reviewQueueViewModel.preferredTripMeter.collectAsState()
     var missingEventWarning by remember { mutableStateOf<String?>(null) }
 
@@ -667,6 +675,16 @@ fun ReviewDetailScreen(
                         detected = parsedCandidate?.tripDistance != null,
                         isEdited = isTripDistanceEdited
                     )
+
+                    calculatedMpg?.let { mpg ->
+                        Text(
+                            text = "MPG: $mpg",
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.padding(start = 4.dp, top = 2.dp)
+                        )
+                    }
 
                     missingEventWarning?.let { warning ->
                         Surface(
