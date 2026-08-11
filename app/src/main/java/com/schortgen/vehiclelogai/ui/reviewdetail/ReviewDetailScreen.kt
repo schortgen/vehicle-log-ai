@@ -1176,17 +1176,6 @@ private fun SuggestedValueField(
                         }
                     }
                 },
-                trailingIcon = if (onCalculateClick != null) {
-                    {
-                        IconButton(onClick = onCalculateClick) {
-                            Icon(
-                                imageVector = Icons.Default.Calculate,
-                                contentDescription = calculateLabel ?: "Calculate $label",
-                                tint = MaterialTheme.colorScheme.primary
-                            )
-                        }
-                    }
-                } else null,
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(8.dp),
                 singleLine = true
@@ -1195,37 +1184,10 @@ private fun SuggestedValueField(
             Row(
                 modifier = Modifier
                     .align(Alignment.TopEnd)
-                    .padding(top = 8.dp, end = if (onCalculateClick != null) 48.dp else 12.dp),
+                    .padding(top = 8.dp, end = 12.dp),
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                if (onCalculateClick != null) {
-                    Surface(
-                        modifier = Modifier.clickable { onCalculateClick() },
-                        shape = RoundedCornerShape(12.dp),
-                        color = MaterialTheme.colorScheme.primaryContainer
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(2.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Calculate,
-                                contentDescription = null,
-                                modifier = Modifier.size(12.dp),
-                                tint = MaterialTheme.colorScheme.onPrimaryContainer
-                            )
-                            Text(
-                                text = calculateLabel ?: "Calc",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onPrimaryContainer,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
-                    }
-                }
-
                 val badgeText = when {
                     isEdited -> "User edit"
                     detected -> "Detected"
