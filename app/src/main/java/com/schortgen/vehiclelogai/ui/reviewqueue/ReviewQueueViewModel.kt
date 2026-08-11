@@ -256,6 +256,62 @@ class ReviewQueueViewModel(
         }
     }
 
+    fun addPhotosBatchToGroup(
+        targetEventId: Long?,
+        activeItem: ReviewItem?,
+        galleryUris: List<String>,
+        reviewItemsToAdd: List<ReviewItem>
+    ) {
+        viewModelScope.launch {
+            try {
+                var eventId = targetEventId
+                if (eventId == null || eventId <= 0L) {
+                    if (activeItem != null) {
+                        val dbItem = reviewItemRepository.getReviewItemById(activeItem.id)
+                        if (dbItem?.eventId != null && dbItem.eventId > 0L) {
+                            eventId = dbItem.eventId
+                        } else {
+                            val vehId = resolveVehicleId(activeItem.vehicleId)
+                            val newEvent = Event(
+                                vehicleId = vehId,
+                                eventType = EventType.FUEL,
+                                eventDate = activeItem.captureDate,
+                                photoPath = activeItem.photoPath,
+                                verified = false
+                            )
+                            val insertedId = eventRepository?.insertEvent(newEvent)
+                            if (insertedId != null && insertedId > 0L) {
+                                eventId = insertedId
+                                reviewItemRepository.updateReviewItem(activeItem.copy(eventId = eventId, vehicleId = vehId))
+                            }
+                        }
+                    }
+                }
+
+                if (eventId != null && eventId > 0L) {
+                    galleryUris.forEach { localPath ->
+                        val newItem = ReviewItem(
+                            photoPath = localPath,
+                            captureDate = activeItem?.captureDate ?: System.currentTimeMillis(),
+                            eventId = eventId,
+                            status = ProcessingStatus.PENDING,
+                            reason = "Added photo"
+                        )
+                        val newId = reviewItemRepository.insertReviewItem(newItem)
+                        processOcr(newId)
+                    }
+
+                    reviewItemsToAdd.forEach { uItem ->
+                        reviewItemRepository.updateReviewItem(uItem.copy(eventId = eventId))
+                        processOcr(uItem.id)
+                    }
+                }
+            } catch (e: Exception) {
+                DiagnosticLogger.e("ReviewQueueVM", "Error in addPhotosBatchToGroup", e)
+            }
+        }
+    }
+
     fun addPhotoToGroup(eventId: Long, item: ReviewItem) {
         viewModelScope.launch {
             try {

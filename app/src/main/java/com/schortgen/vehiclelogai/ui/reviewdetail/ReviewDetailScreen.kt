@@ -1221,17 +1221,12 @@ fun ReviewDetailScreen(
                         selectedGalleryPaths.clear()
                         selectedUngroupedItems.clear()
 
-                        galleryToAdd.forEach { localPath ->
-                            reviewQueueViewModel.addPhotoUriToGroup(targetEventId, activeItem, localPath)
-                        }
-
-                        itemsToAdd.forEach { uItem ->
-                            if (targetEventId != null && targetEventId > 0L) {
-                                reviewQueueViewModel.addPhotoToGroup(targetEventId, uItem)
-                            } else if (activeItem != null) {
-                                reviewQueueViewModel.groupExistingItemWithActiveItem(activeItem, uItem)
-                            }
-                        }
+                        reviewQueueViewModel.addPhotosBatchToGroup(
+                            targetEventId = targetEventId,
+                            activeItem = activeItem,
+                            galleryUris = galleryToAdd,
+                            reviewItemsToAdd = itemsToAdd
+                        )
                     },
                     enabled = totalSelected > 0
                 ) {
