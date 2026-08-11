@@ -113,8 +113,12 @@ fun ReviewDetailScreen(
         reviewItems.find { it.id == reviewItemId }
     }
 
-    val targetEventId = remember(eventId, currentItem) {
-        if (eventId != -1L) eventId else currentItem?.eventId
+    val targetEventId = remember(eventId, reviewItems, reviewItemId) {
+        if (eventId != -1L && eventId > 0L) {
+            eventId
+        } else {
+            reviewItems.find { it.id == reviewItemId }?.eventId
+        }
     }
 
     val groupItems = remember(reviewItems, targetEventId, currentItem) {
@@ -230,25 +234,25 @@ fun ReviewDetailScreen(
 
     LaunchedEffect(parsedCandidate) {
         if (parsedCandidate != null) {
-            if (!isStationNameEdited && stationName.isEmpty() && !parsedCandidate.stationName.isNullOrEmpty()) {
+            if (!isStationNameEdited && !parsedCandidate.stationName.isNullOrEmpty()) {
                 stationName = parsedCandidate.stationName
             }
-            if (!isPurchaseDateEdited && purchaseDate.isEmpty() && !parsedCandidate.purchaseDate.isNullOrEmpty()) {
+            if (!isPurchaseDateEdited && !parsedCandidate.purchaseDate.isNullOrEmpty()) {
                 purchaseDate = parsedCandidate.purchaseDate
             }
-            if (!isGallonsEdited && gallons.isEmpty() && parsedCandidate.gallons != null) {
+            if (!isGallonsEdited && parsedCandidate.gallons != null) {
                 gallons = parsedCandidate.gallons.toString()
             }
-            if (!isPricePerGallonEdited && pricePerGallon.isEmpty() && parsedCandidate.pricePerGallon != null) {
+            if (!isPricePerGallonEdited && parsedCandidate.pricePerGallon != null) {
                 pricePerGallon = parsedCandidate.pricePerGallon.toString()
             }
-            if (!isTotalCostEdited && totalCost.isEmpty() && parsedCandidate.totalCost != null) {
+            if (!isTotalCostEdited && parsedCandidate.totalCost != null) {
                 totalCost = parsedCandidate.totalCost.toString()
             }
-            if (!isOdometerEdited && odometer.isEmpty() && parsedCandidate.odometer != null) {
+            if (!isOdometerEdited && parsedCandidate.odometer != null) {
                 odometer = parsedCandidate.odometer.toString()
             }
-            if (!isTripDistanceEdited && tripDistance.isEmpty() && parsedCandidate.tripDistance != null) {
+            if (!isTripDistanceEdited && parsedCandidate.tripDistance != null) {
                 tripDistance = parsedCandidate.tripDistance.toString()
             }
         }
