@@ -15,6 +15,7 @@ import androidx.navigation.NavController
 import com.schortgen.vehiclelogai.data.models.EventType
 import com.schortgen.vehiclelogai.data.models.Vehicle
 import com.schortgen.vehiclelogai.data.models.calculateMpg
+import com.schortgen.vehiclelogai.data.models.displayName
 import com.schortgen.vehiclelogai.navigation.Screen
 import com.schortgen.vehiclelogai.ui.events.EventViewModel
 import com.schortgen.vehiclelogai.ui.vehicles.VehicleViewModel
@@ -30,7 +31,11 @@ fun VehicleDetailScreen(
     eventViewModel: EventViewModel,
     vehicleId: Long
 ) {
-    var vehicle by remember { mutableStateOf<Vehicle?>(null) }
+    val allVehicles by vehicleViewModel.vehicles.collectAsState()
+    var fetchedVehicle by remember { mutableStateOf<Vehicle?>(null) }
+    val vehicle = remember(allVehicles, fetchedVehicle, vehicleId) {
+        allVehicles.find { it.id == vehicleId } ?: fetchedVehicle
+    }
     val events by eventViewModel.observeEventsForVehicle(vehicleId).collectAsState(initial = emptyList())
     val sortedEvents = remember(events) {
         events.sortedWith(compareByDescending<com.schortgen.vehiclelogai.data.models.Event> { it.eventDate }.thenByDescending { it.id })
@@ -40,13 +45,15 @@ fun VehicleDetailScreen(
 
     // Fetch the vehicle from the local database when the screen loads
     LaunchedEffect(vehicleId) {
-        vehicle = vehicleViewModel.getVehicleById(vehicleId)
+        if (fetchedVehicle == null) {
+            fetchedVehicle = vehicleViewModel.getVehicleById(vehicleId)
+        }
     }
 
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(vehicle?.nickname ?: "Loading...") },
+                title = { Text(vehicle?.displayName ?: "Loading...") },
                 navigationIcon = {
                     IconButton(onClick = { navController.popBackStack() }) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")

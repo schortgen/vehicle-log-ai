@@ -16,3 +16,10 @@ data class Vehicle(
     val isActive: Boolean = true,
     val createdDate: Long = System.currentTimeMillis()
 )
+
+val Vehicle.displayName: String
+    get() {
+        if (!nickname.isNullOrBlank()) return nickname
+        val details = "${year ?: ""} ${make ?: ""} ${model ?: ""}".trim()
+        return details.ifEmpty { "Vehicle #$id" }
+    }
