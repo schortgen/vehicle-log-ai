@@ -110,6 +110,12 @@ Return ONLY a valid JSON object matching this schema (do not wrap in markdown co
     res.json({ status: 'ok', timestamp: new Date().toISOString() });
   });
 
+  // Download endpoint for clean gradle-wrapper.jar
+  app.get(['/api/download/gradle-wrapper.jar', '/gradle-wrapper.jar'], (req, res) => {
+    const jarPath = path.join(process.cwd(), 'gradle', 'wrapper', 'gradle-wrapper.jar');
+    res.download(jarPath, 'gradle-wrapper.jar');
+  });
+
   // AI Code Analysis endpoint using Gemini
   app.post('/api/ai/analyze-code', async (req, res) => {
     try {
