@@ -10,6 +10,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -44,7 +45,28 @@ fun EventDetailScreen(
     var editTotalCost by remember { mutableStateOf("") }
     var editLocation by remember { mutableStateOf("") }
     var selectedDateMillis by remember { mutableLongStateOf(System.currentTimeMillis()) }
-    var showDatePicker by remember { mutableStateOf(false) }
+    val context = LocalContext.current
+
+    val showDatePickerDialog = {
+        val cal = Calendar.getInstance().apply {
+            timeInMillis = if (selectedDateMillis > 0) selectedDateMillis else System.currentTimeMillis()
+        }
+        android.app.DatePickerDialog(
+            context,
+            { _, year, month, dayOfMonth ->
+                val newCal = Calendar.getInstance().apply {
+                    timeInMillis = selectedDateMillis
+                    set(Calendar.YEAR, year)
+                    set(Calendar.MONTH, month)
+                    set(Calendar.DAY_OF_MONTH, dayOfMonth)
+                }
+                selectedDateMillis = newCal.timeInMillis
+            },
+            cal.get(Calendar.YEAR),
+            cal.get(Calendar.MONTH),
+            cal.get(Calendar.DAY_OF_MONTH)
+        ).show()
+    }
 
     var pendingEventToUpdate by remember { mutableStateOf<Event?>(null) }
     var warningMessageToDisplay by remember { mutableStateOf<String?>(null) }
@@ -115,41 +137,6 @@ fun EventDetailScreen(
             editTotalCost = e.totalCost?.toString() ?: ""
             editLocation = e.location ?: ""
             selectedDateMillis = e.eventDate
-        }
-    }
-
-    if (showDatePicker) {
-        val datePickerState = rememberDatePickerState(initialSelectedDateMillis = selectedDateMillis)
-        DatePickerDialog(
-            onDismissRequest = { showDatePicker = false },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        datePickerState.selectedDateMillis?.let {
-                            val calSelected = Calendar.getInstance(TimeZone.getTimeZone("UTC")).apply {
-                                timeInMillis = it
-                            }
-                            val calCurrent = Calendar.getInstance().apply {
-                                timeInMillis = selectedDateMillis
-                            }
-                            calCurrent.set(Calendar.YEAR, calSelected.get(Calendar.YEAR))
-                            calCurrent.set(Calendar.MONTH, calSelected.get(Calendar.MONTH))
-                            calCurrent.set(Calendar.DAY_OF_MONTH, calSelected.get(Calendar.DAY_OF_MONTH))
-                            selectedDateMillis = calCurrent.timeInMillis
-                        }
-                        showDatePicker = false
-                    }
-                ) {
-                    Text("OK")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showDatePicker = false }) {
-                    Text("Cancel")
-                }
-            }
-        ) {
-            DatePicker(state = datePickerState)
         }
     }
 
@@ -247,7 +234,7 @@ fun EventDetailScreen(
                         if (isEditing) {
                             // Date selector
                             OutlinedCard(
-                                onClick = { showDatePicker = true },
+                                onClick = { showDatePickerDialog() },
                                 modifier = Modifier.fillMaxWidth()
                             ) {
                                 Row(

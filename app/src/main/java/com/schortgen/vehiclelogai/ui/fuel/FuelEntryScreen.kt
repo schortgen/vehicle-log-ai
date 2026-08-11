@@ -11,6 +11,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
@@ -33,7 +34,28 @@ fun FuelEntryScreen(
     // Date state
     val calendar = remember { Calendar.getInstance() }
     var selectedDateMillis by remember { mutableLongStateOf(calendar.timeInMillis) }
-    var showDatePicker by remember { mutableStateOf(false) }
+    val context = LocalContext.current
+
+    val showDatePickerDialog = {
+        val cal = Calendar.getInstance().apply {
+            timeInMillis = if (selectedDateMillis > 0) selectedDateMillis else System.currentTimeMillis()
+        }
+        android.app.DatePickerDialog(
+            context,
+            { _, year, month, dayOfMonth ->
+                val newCal = Calendar.getInstance().apply {
+                    timeInMillis = selectedDateMillis
+                    set(Calendar.YEAR, year)
+                    set(Calendar.MONTH, month)
+                    set(Calendar.DAY_OF_MONTH, dayOfMonth)
+                }
+                selectedDateMillis = newCal.timeInMillis
+            },
+            cal.get(Calendar.YEAR),
+            cal.get(Calendar.MONTH),
+            cal.get(Calendar.DAY_OF_MONTH)
+        ).show()
+    }
 
     // Field states
     var odometerText by remember { mutableStateOf("") }
@@ -234,31 +256,6 @@ fun FuelEntryScreen(
         )
     }
 
-    // Date picker dialog
-    if (showDatePicker) {
-        val datePickerState = rememberDatePickerState(
-            initialSelectedDateMillis = selectedDateMillis
-        )
-        DatePickerDialog(
-            onDismissRequest = { showDatePicker = false },
-            confirmButton = {
-                TextButton(onClick = {
-                    datePickerState.selectedDateMillis?.let { selectedDateMillis = it }
-                    showDatePicker = false
-                }) {
-                    Text("OK")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showDatePicker = false }) {
-                    Text("Cancel")
-                }
-            }
-        ) {
-            DatePicker(state = datePickerState)
-        }
-    }
-
     Scaffold(
         topBar = {
             TopAppBar(
@@ -283,7 +280,7 @@ fun FuelEntryScreen(
 
             // Date picker
             OutlinedCard(
-                onClick = { showDatePicker = true },
+                onClick = { showDatePickerDialog() },
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Row(
