@@ -89,7 +89,6 @@ fun EventDetailScreen(
     var editTotalCost by remember { mutableStateOf("") }
     var editLocation by remember { mutableStateOf("") }
     var selectedDateMillis by remember { mutableLongStateOf(System.currentTimeMillis()) }
-    val context = LocalContext.current
 
     val showDatePickerDialog = {
         val cal = Calendar.getInstance().apply {
