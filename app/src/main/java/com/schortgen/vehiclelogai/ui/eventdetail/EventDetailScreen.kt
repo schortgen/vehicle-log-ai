@@ -18,8 +18,10 @@ import com.schortgen.vehiclelogai.data.models.Event
 import com.schortgen.vehiclelogai.data.models.EventType
 import com.schortgen.vehiclelogai.ui.events.EventViewModel
 import java.text.SimpleDateFormat
+import java.util.Calendar
 import java.util.Date
 import java.util.Locale
+import java.util.TimeZone
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -40,7 +42,7 @@ fun EventDetailScreen(
     var editPricePerGallon by remember { mutableStateOf("") }
     var editTotalCost by remember { mutableStateOf("") }
     var editLocation by remember { mutableStateOf("") }
-    var editEventDate by remember { mutableStateOf("") }
+    var selectedDateMillis by remember { mutableLongStateOf(System.currentTimeMillis()) }
     var showDatePicker by remember { mutableStateOf(false) }
 
     // Load event
@@ -54,7 +56,42 @@ fun EventDetailScreen(
             editPricePerGallon = e.pricePerGallon?.toString() ?: ""
             editTotalCost = e.totalCost?.toString() ?: ""
             editLocation = e.location ?: ""
-            editEventDate = dateFormat.format(Date(e.eventDate))
+            selectedDateMillis = e.eventDate
+        }
+    }
+
+    if (showDatePicker) {
+        val datePickerState = rememberDatePickerState(initialSelectedDateMillis = selectedDateMillis)
+        DatePickerDialog(
+            onDismissRequest = { showDatePicker = false },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        datePickerState.selectedDateMillis?.let {
+                            val calSelected = Calendar.getInstance(TimeZone.getTimeZone("UTC")).apply {
+                                timeInMillis = it
+                            }
+                            val calCurrent = Calendar.getInstance().apply {
+                                timeInMillis = selectedDateMillis
+                            }
+                            calCurrent.set(Calendar.YEAR, calSelected.get(Calendar.YEAR))
+                            calCurrent.set(Calendar.MONTH, calSelected.get(Calendar.MONTH))
+                            calCurrent.set(Calendar.DAY_OF_MONTH, calSelected.get(Calendar.DAY_OF_MONTH))
+                            selectedDateMillis = calCurrent.timeInMillis
+                        }
+                        showDatePicker = false
+                    }
+                ) {
+                    Text("OK")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDatePicker = false }) {
+                    Text("Cancel")
+                }
+            }
+        ) {
+            DatePicker(state = datePickerState)
         }
     }
 
@@ -150,6 +187,38 @@ fun EventDetailScreen(
                         Spacer(modifier = Modifier.height(12.dp))
 
                         if (isEditing) {
+                            // Date selector
+                            OutlinedCard(
+                                onClick = { showDatePicker = true },
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(16.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Column {
+                                        Text(
+                                            "Event / Purchase Date",
+                                            style = MaterialTheme.typography.labelMedium,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                        Text(
+                                            dateFormat.format(Date(selectedDateMillis)),
+                                            style = MaterialTheme.typography.bodyLarge
+                                        )
+                                    }
+                                    Text(
+                                        "Change Date",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.primary
+                                    )
+                                }
+                            }
+                            Spacer(modifier = Modifier.height(8.dp))
+
                             // Editable fields
                             OutlinedTextField(
                                 value = editNotes,
@@ -288,6 +357,7 @@ fun EventDetailScreen(
                             Button(
                                 onClick = {
                                     val updated = ev.copy(
+                                        eventDate = selectedDateMillis,
                                         notes = editNotes.ifBlank { null },
                                         odometer = if (ev.eventType == EventType.FUEL || editOdometer.isNotBlank()) editOdometer.toIntOrNull() ?: ev.odometer else ev.odometer,
                                         tripDistance = editTripDistance.toDoubleOrNull() ?: ev.tripDistance,
@@ -326,6 +396,7 @@ fun EventDetailScreen(
                             Button(
                                 onClick = {
                                     val updated = ev.copy(
+                                        eventDate = selectedDateMillis,
                                         notes = editNotes.ifBlank { null },
                                         odometer = editOdometer.toIntOrNull() ?: ev.odometer,
                                         gallons = if (ev.eventType == EventType.FUEL) editGallons.toDoubleOrNull() ?: ev.gallons else ev.gallons,
