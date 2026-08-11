@@ -977,16 +977,26 @@ fun ReviewDetailScreen(
 
     // Add Photo to Group Dialog
     if (showAddPhotoDialog) {
-        val ungroupedList = remember(reviewItems, groupItems) {
+        val ungroupedList = remember(reviewItems, groupItems, selectedUngroupedItems.toList()) {
+            val baseItems = if (groupItems.isNotEmpty()) groupItems else listOfNotNull(activeItem ?: currentItem)
             val available = reviewItems.filter { it.eventId == null && it !in groupItems }
-            if (groupItems.isEmpty()) {
-                available.take(2)
+            if (baseItems.isEmpty()) {
+                (selectedUngroupedItems + available.filter { it !in selectedUngroupedItems }.take(2))
+                    .distinctBy { it.id }
+                    .sortedBy { it.captureDate }
             } else {
-                val minDate = groupItems.minOf { it.captureDate }
-                val maxDate = groupItems.maxOf { it.captureDate }
-                val photoBefore = available.filter { it.captureDate <= minDate }.maxByOrNull { it.captureDate }
-                val photoAfter = available.filter { it.captureDate >= maxDate }.minByOrNull { it.captureDate }
-                listOfNotNull(photoBefore, photoAfter).distinctBy { it.id }.sortedBy { it.captureDate }
+                val combinedItems = baseItems + selectedUngroupedItems
+                val minDate = combinedItems.minOf { it.captureDate }
+                val maxDate = combinedItems.maxOf { it.captureDate }
+
+                val unselectedAvailable = available.filter { it !in selectedUngroupedItems }
+                val photoBefore = unselectedAvailable.filter { it.captureDate <= minDate }.maxByOrNull { it.captureDate }
+                val photoAfter = unselectedAvailable.filter { it.captureDate >= maxDate }.minByOrNull { it.captureDate }
+                val photosBetween = unselectedAvailable.filter { it.captureDate in minDate..maxDate }
+
+                (selectedUngroupedItems + listOfNotNull(photoBefore, photoAfter) + photosBetween)
+                    .distinctBy { it.id }
+                    .sortedBy { it.captureDate }
             }
         }
 
@@ -1022,8 +1032,16 @@ fun ReviewDetailScreen(
                         LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             items(ungroupedList) { uItem ->
                                 val isSelected = uItem in selectedUngroupedItems
-                                val minGroupDate = groupItems.minOfOrNull { it.captureDate } ?: 0L
-                                val isBefore = minGroupDate > 0L && uItem.captureDate <= minGroupDate
+                                val baseItems = if (groupItems.isNotEmpty()) groupItems else listOfNotNull(activeItem ?: currentItem)
+                                val baseMinDate = baseItems.minOfOrNull { it.captureDate } ?: 0L
+                                val baseMaxDate = baseItems.maxOfOrNull { it.captureDate } ?: 0L
+                                val isBefore = if (baseMinDate > 0L && baseMaxDate > 0L) {
+                                    if (uItem.captureDate <= baseMinDate) true
+                                    else if (uItem.captureDate >= baseMaxDate) false
+                                    else uItem.captureDate < (baseMinDate + baseMaxDate) / 2
+                                } else {
+                                    true
+                                }
                                 val labelText = if (isBefore) "Earlier" else "Later"
 
                                 Surface(
