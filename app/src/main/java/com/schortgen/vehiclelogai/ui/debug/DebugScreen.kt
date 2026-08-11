@@ -64,7 +64,8 @@ fun DebugScreen(navController: NavController) {
             eventRepository = app.eventRepository,
             mlKitOcrService = app.mlKitOcrService,
             receiptParserService = app.receiptParserService,
-            settingsRepository = app.settingsRepository
+            settingsRepository = app.settingsRepository,
+            photoScannerRepository = app.photoScannerRepository
         )
     )
     val viewModel: DiagnosticsViewModel = viewModel(

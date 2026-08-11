@@ -24,4 +24,8 @@ class PhotoScannerRepository(private val scannedPhotoDao: ScannedPhotoDao) {
     suspend fun getImportedCount(): Int {
         return scannedPhotoDao.count()
     }
+
+    suspend fun clearAll() {
+        scannedPhotoDao.deleteAllScannedPhotos()
+    }
 }

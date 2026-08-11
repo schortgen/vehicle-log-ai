@@ -3,6 +3,8 @@ package com.schortgen.vehiclelogai.ui.reviewdetail
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.*
@@ -10,6 +12,7 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
@@ -18,8 +21,13 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Calculate
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Warning
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.sp
+import com.schortgen.vehiclelogai.data.models.ReviewItem
 import java.util.Locale
 import com.schortgen.vehiclelogai.data.repository.PreferredTripMeter
 import androidx.compose.material3.*
@@ -250,12 +258,17 @@ fun ReviewDetailScreen(
     var dialogImageUri by remember { mutableStateOf<String?>(null) }
     var showAddPhotoDialog by remember { mutableStateOf(false) }
 
+    val selectedGalleryPaths = remember { mutableStateListOf<String>() }
+    val selectedUngroupedItems = remember { mutableStateListOf<ReviewItem>() }
+
     val photoPickerLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.GetContent()
-    ) { uri: Uri? ->
-        if (uri != null) {
+        contract = ActivityResultContracts.GetMultipleContents()
+    ) { uris: List<Uri> ->
+        uris.forEach { uri ->
             val localPath = copyUriToInternalStorage(context, uri)
-            reviewQueueViewModel.addPhotoUriToGroup(targetEventId, activeItem, localPath)
+            if (localPath !in selectedGalleryPaths) {
+                selectedGalleryPaths.add(localPath)
+            }
         }
     }
 
@@ -978,13 +991,16 @@ fun ReviewDetailScreen(
         }
 
         AlertDialog(
-            onDismissRequest = { showAddPhotoDialog = false },
-            title = { Text("Add Photo to Group", fontWeight = FontWeight.Bold) },
+            onDismissRequest = {
+                showAddPhotoDialog = false
+                selectedGalleryPaths.clear()
+                selectedUngroupedItems.clear()
+            },
+            title = { Text("Add Photos to Group", fontWeight = FontWeight.Bold) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Button(
                         onClick = {
-                            showAddPhotoDialog = false
                             try {
                                 photoPickerLauncher.launch("image/*")
                             } catch (e: Exception) {
@@ -994,17 +1010,18 @@ fun ReviewDetailScreen(
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(12.dp)
                     ) {
-                        Text("📁 Pick Photo from Gallery")
+                        Text("📁 Pick Photos from Gallery")
                     }
 
                     if (ungroupedList.isNotEmpty()) {
                         Text(
-                            text = "Or select a adjacent photo:",
+                            text = "Or select adjacent photos:",
                             style = MaterialTheme.typography.labelMedium,
                             fontWeight = FontWeight.SemiBold
                         )
                         LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             items(ungroupedList) { uItem ->
+                                val isSelected = uItem in selectedUngroupedItems
                                 val minGroupDate = groupItems.minOfOrNull { it.captureDate } ?: 0L
                                 val isBefore = minGroupDate > 0L && uItem.captureDate <= minGroupDate
                                 val labelText = if (isBefore) "Earlier" else "Later"
@@ -1013,14 +1030,14 @@ fun ReviewDetailScreen(
                                     modifier = Modifier
                                         .size(96.dp)
                                         .clickable {
-                                            showAddPhotoDialog = false
-                                            if (targetEventId != null && targetEventId > 0L) {
-                                                reviewQueueViewModel.addPhotoToGroup(targetEventId, uItem)
-                                            } else if (activeItem != null) {
-                                                reviewQueueViewModel.groupExistingItemWithActiveItem(activeItem, uItem)
+                                            if (isSelected) {
+                                                selectedUngroupedItems.remove(uItem)
+                                            } else {
+                                                selectedUngroupedItems.add(uItem)
                                             }
                                         },
                                     shape = RoundedCornerShape(8.dp),
+                                    border = if (isSelected) BorderStroke(2.dp, MaterialTheme.colorScheme.primary) else null,
                                     color = MaterialTheme.colorScheme.surfaceVariant
                                 ) {
                                     val uPath = uItem.photoPath
@@ -1038,6 +1055,25 @@ fun ReviewDetailScreen(
                                                 Text("📷")
                                             }
                                         }
+
+                                        if (isSelected) {
+                                            Surface(
+                                                modifier = Modifier
+                                                    .align(Alignment.TopEnd)
+                                                    .padding(4.dp)
+                                                    .size(24.dp),
+                                                shape = CircleShape,
+                                                color = MaterialTheme.colorScheme.primary
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Filled.Check,
+                                                    contentDescription = "Selected",
+                                                    tint = Color.White,
+                                                    modifier = Modifier.padding(4.dp)
+                                                )
+                                            }
+                                        }
+
                                         Surface(
                                             modifier = Modifier
                                                 .align(Alignment.BottomCenter)
@@ -1056,11 +1092,158 @@ fun ReviewDetailScreen(
                             }
                         }
                     }
+
+                    val totalSelected = selectedGalleryPaths.size + selectedUngroupedItems.size
+                    if (totalSelected > 0) {
+                        HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+                        Text(
+                            text = "Selected Files ($totalSelected):",
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            items(selectedGalleryPaths) { gPath ->
+                                Box(
+                                    modifier = Modifier
+                                        .size(80.dp)
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .background(MaterialTheme.colorScheme.surfaceVariant)
+                                ) {
+                                    AsyncImage(
+                                        model = ImageRequest.Builder(context).data(gPath).build(),
+                                        contentDescription = "Selected Gallery Photo",
+                                        contentScale = ContentScale.Crop,
+                                        modifier = Modifier.fillMaxSize()
+                                    )
+                                    Surface(
+                                        modifier = Modifier
+                                            .align(Alignment.TopEnd)
+                                            .padding(2.dp)
+                                            .size(20.dp)
+                                            .clickable { selectedGalleryPaths.remove(gPath) },
+                                        shape = CircleShape,
+                                        color = Color.Black.copy(alpha = 0.7f)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Filled.Close,
+                                            contentDescription = "Remove",
+                                            tint = Color.White,
+                                            modifier = Modifier.padding(2.dp)
+                                        )
+                                    }
+                                    Surface(
+                                        modifier = Modifier
+                                            .align(Alignment.BottomCenter)
+                                            .fillMaxWidth(),
+                                        color = Color.Black.copy(alpha = 0.6f)
+                                    ) {
+                                        Text(
+                                            text = "Gallery",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = Color.White,
+                                            fontSize = 9.sp,
+                                            textAlign = TextAlign.Center,
+                                            modifier = Modifier.padding(1.dp)
+                                        )
+                                    }
+                                }
+                            }
+
+                            items(selectedUngroupedItems) { uItem ->
+                                Box(
+                                    modifier = Modifier
+                                        .size(80.dp)
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .background(MaterialTheme.colorScheme.surfaceVariant)
+                                ) {
+                                    val uPath = uItem.photoPath
+                                    if (!uPath.isNullOrBlank()) {
+                                        val uData = if (uPath.startsWith("content://") || uPath.startsWith("file://")) Uri.parse(uPath) else uPath
+                                        AsyncImage(
+                                            model = ImageRequest.Builder(context).data(uData).build(),
+                                            contentDescription = "Selected Adjacent Photo",
+                                            contentScale = ContentScale.Crop,
+                                            modifier = Modifier.fillMaxSize()
+                                        )
+                                    } else {
+                                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                                            Text("📷")
+                                        }
+                                    }
+                                    Surface(
+                                        modifier = Modifier
+                                            .align(Alignment.TopEnd)
+                                            .padding(2.dp)
+                                            .size(20.dp)
+                                            .clickable { selectedUngroupedItems.remove(uItem) },
+                                        shape = CircleShape,
+                                        color = Color.Black.copy(alpha = 0.7f)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Filled.Close,
+                                            contentDescription = "Remove",
+                                            tint = Color.White,
+                                            modifier = Modifier.padding(2.dp)
+                                        )
+                                    }
+                                    Surface(
+                                        modifier = Modifier
+                                            .align(Alignment.BottomCenter)
+                                            .fillMaxWidth(),
+                                        color = Color.Black.copy(alpha = 0.6f)
+                                    ) {
+                                        Text(
+                                            text = "Adjacent",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = Color.White,
+                                            fontSize = 9.sp,
+                                            textAlign = TextAlign.Center,
+                                            modifier = Modifier.padding(1.dp)
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
             },
-            confirmButton = {},
+            confirmButton = {
+                val totalSelected = selectedGalleryPaths.size + selectedUngroupedItems.size
+                Button(
+                    onClick = {
+                        val galleryToAdd = selectedGalleryPaths.toList()
+                        val itemsToAdd = selectedUngroupedItems.toList()
+
+                        showAddPhotoDialog = false
+                        selectedGalleryPaths.clear()
+                        selectedUngroupedItems.clear()
+
+                        galleryToAdd.forEach { localPath ->
+                            reviewQueueViewModel.addPhotoUriToGroup(targetEventId, activeItem, localPath)
+                        }
+
+                        itemsToAdd.forEach { uItem ->
+                            if (targetEventId != null && targetEventId > 0L) {
+                                reviewQueueViewModel.addPhotoToGroup(targetEventId, uItem)
+                            } else if (activeItem != null) {
+                                reviewQueueViewModel.groupExistingItemWithActiveItem(activeItem, uItem)
+                            }
+                        }
+                    },
+                    enabled = totalSelected > 0
+                ) {
+                    Text(if (totalSelected > 0) "Done ($totalSelected)" else "Done")
+                }
+            },
             dismissButton = {
-                TextButton(onClick = { showAddPhotoDialog = false }) {
+                TextButton(
+                    onClick = {
+                        showAddPhotoDialog = false
+                        selectedGalleryPaths.clear()
+                        selectedUngroupedItems.clear()
+                    }
+                ) {
                     Text("Cancel")
                 }
             }

@@ -72,7 +72,8 @@ class VehicleLogAIApplication : Application {
         photoScannerService = PhotoScannerService(
             context = this,
             photoScannerRepository = photoScannerRepository,
-            reviewItemRepository = reviewItemRepository
+            reviewItemRepository = reviewItemRepository,
+            eventRepository = eventRepository
         )
         mlKitOcrService = MlKitOcrService(this)
         receiptParserService = ReceiptParserService()

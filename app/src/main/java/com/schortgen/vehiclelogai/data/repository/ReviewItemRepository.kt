@@ -70,6 +70,10 @@ class ReviewItemRepository(private val reviewItemDao: ReviewItemDao) {
         reviewItemDao.delete(reviewItem)
     }
 
+    suspend fun deleteAllReviewItems() {
+        reviewItemDao.deleteAllReviewItems()
+    }
+
     suspend fun getReviewItemById(id: Long): ReviewItem? {
         return reviewItemDao.getById(id)
     }

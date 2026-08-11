@@ -102,7 +102,8 @@ fun NavGraph(
             receiptParserService = app.receiptParserService,
             eventGroupingService = eventGroupingService,
             settingsRepository = app.settingsRepository,
-            photoMoverService = app.photoMoverService
+            photoMoverService = app.photoMoverService,
+            photoScannerRepository = app.photoScannerRepository
         )
     )
     val settingsViewModel: SettingsViewModel = viewModel(

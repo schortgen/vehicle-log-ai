@@ -23,6 +23,10 @@ class EventRepository(
         eventDao.delete(event)
     }
 
+    suspend fun deleteUnverifiedEvents() {
+        eventDao.deleteUnverifiedEvents()
+    }
+
     suspend fun getEventById(id: Long): Event? {
         return eventDao.getById(id)
     }

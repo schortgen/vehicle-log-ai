@@ -29,14 +29,20 @@ fun ScanPhotosScreen(
     navController: NavController,
     reviewQueueViewModel: ReviewQueueViewModel,
     viewModel: ScanPhotosViewModel = viewModel(
-        factory = ScanViewModelFactory(LocalContext.current) { uri, dateTaken ->
-            reviewQueueViewModel.insertItemAndReturnNew(
-                ReviewItem(
-                    photoPath = uri.toString(),
-                    captureDate = dateTaken
+        factory = ScanViewModelFactory(
+            context = LocalContext.current,
+            clearQueueLambda = {
+                reviewQueueViewModel.clearQueueSuspend()
+            },
+            addToQueueLambda = { uri, dateTaken ->
+                reviewQueueViewModel.insertItemAndReturnNew(
+                    ReviewItem(
+                        photoPath = uri.toString(),
+                        captureDate = dateTaken
+                    )
                 )
-            )
-        }
+            }
+        )
     )
 ) {
     val context = LocalContext.current

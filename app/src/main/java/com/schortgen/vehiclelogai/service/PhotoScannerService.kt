@@ -11,6 +11,7 @@ import com.schortgen.vehiclelogai.data.models.PhotoCandidate
 import com.schortgen.vehiclelogai.data.models.ProcessingStatus
 import com.schortgen.vehiclelogai.data.models.ReviewItem
 import com.schortgen.vehiclelogai.data.models.ScannedPhoto
+import com.schortgen.vehiclelogai.data.repository.EventRepository
 import com.schortgen.vehiclelogai.data.repository.PhotoScannerRepository
 import com.schortgen.vehiclelogai.data.repository.ReviewItemRepository
 import com.schortgen.vehiclelogai.debug.DiagnosticLogger
@@ -28,8 +29,15 @@ import kotlinx.coroutines.withContext
 class PhotoScannerService(
     private val context: Context,
     private val photoScannerRepository: PhotoScannerRepository,
-    private val reviewItemRepository: ReviewItemRepository
+    private val reviewItemRepository: ReviewItemRepository,
+    private val eventRepository: EventRepository? = null
 ) {
+
+    suspend fun clearQueue() = withContext(Dispatchers.IO) {
+        reviewItemRepository.deleteAllReviewItems()
+        photoScannerRepository.clearAll()
+        eventRepository?.deleteUnverifiedEvents()
+    }
 
     private val supportedMimeTypes = setOf(
         "image/jpeg",
@@ -64,11 +72,15 @@ class PhotoScannerService(
      */
     suspend fun scanAndImport(
         startDateMillis: Long? = null,
-        endDateMillis: Long? = null
+        endDateMillis: Long? = null,
+        clearQueueFirst: Boolean = true
     ): Int = withContext(Dispatchers.IO) {
         val startedAt = System.nanoTime()
         DiagnosticLogger.i("Scanner", "scanAndImport begin (range: $startDateMillis .. $endDateMillis)")
         try {
+            if (clearQueueFirst) {
+                clearQueue()
+            }
             val candidates = queryMediaStore(startDateMillis, endDateMillis)
             var importedCount = 0
             var skippedAlreadyImported = 0

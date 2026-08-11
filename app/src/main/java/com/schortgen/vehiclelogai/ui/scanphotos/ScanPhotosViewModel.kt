@@ -13,7 +13,8 @@ import kotlinx.coroutines.flow.asStateFlow
 import java.util.*
 
 class ScanPhotosViewModel(
-    private val addToReviewQueue: suspend (Uri, Long) -> Boolean // provide your queue function here
+    private val addToReviewQueue: suspend (Uri, Long) -> Boolean, // provide your queue function here
+    private val clearReviewQueue: (suspend () -> Unit)? = null
 ) : ViewModel() {
 
     private val _startDateMillis = MutableStateFlow<Long?>(null)
@@ -57,6 +58,8 @@ class ScanPhotosViewModel(
                 _scannedCount.value = 0
                 _queuedCount.value = 0
                 _totalToScan.value = null
+
+                clearReviewQueue?.invoke()
 
                 // Build selection for MediaStore
                 val projection = arrayOf(

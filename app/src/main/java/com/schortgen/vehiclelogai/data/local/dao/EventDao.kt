@@ -63,6 +63,9 @@ interface EventDao {
     @Query("DELETE FROM events")
     suspend fun deleteAllEvents()
 
+    @Query("DELETE FROM events WHERE verified = 0")
+    suspend fun deleteUnverifiedEvents()
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertAll(events: List<Event>)
 }

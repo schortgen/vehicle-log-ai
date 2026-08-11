@@ -13,6 +13,7 @@ import com.schortgen.vehiclelogai.data.models.ReviewItem
 import com.schortgen.vehiclelogai.data.models.Vehicle
 import com.schortgen.vehiclelogai.data.repository.EventRepository
 import com.schortgen.vehiclelogai.data.repository.PreferredTripMeter
+import com.schortgen.vehiclelogai.data.repository.PhotoScannerRepository
 import com.schortgen.vehiclelogai.data.repository.ReviewItemRepository
 import com.schortgen.vehiclelogai.data.repository.SettingsRepository
 import com.schortgen.vehiclelogai.data.repository.VehicleRepository
@@ -22,6 +23,7 @@ import com.schortgen.vehiclelogai.service.EventGroupingService
 import com.schortgen.vehiclelogai.service.MlKitOcrService
 import com.schortgen.vehiclelogai.service.PhotoMoverService
 import com.schortgen.vehiclelogai.service.ReceiptParserService
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -31,6 +33,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.json.JSONObject
 
 sealed class ReviewQueueItem {
@@ -46,8 +49,21 @@ class ReviewQueueViewModel(
     private val receiptParserService: ReceiptParserService? = null,
     private val eventGroupingService: EventGroupingService? = null,
     private val settingsRepository: SettingsRepository? = null,
-    private val photoMoverService: PhotoMoverService? = null
+    private val photoMoverService: PhotoMoverService? = null,
+    private val photoScannerRepository: PhotoScannerRepository? = null
 ) : ViewModel() {
+
+    fun clearQueue() {
+        viewModelScope.launch(Dispatchers.IO) {
+            clearQueueSuspend()
+        }
+    }
+
+    suspend fun clearQueueSuspend() = withContext(Dispatchers.IO) {
+        reviewItemRepository.deleteAllReviewItems()
+        photoScannerRepository?.clearAll()
+        eventRepository?.deleteUnverifiedEvents()
+    }
 
     private val _ocrProcessingIds = MutableStateFlow<Set<Long>>(emptySet())
     val ocrProcessingIds: StateFlow<Set<Long>> = _ocrProcessingIds.asStateFlow()
@@ -244,6 +260,7 @@ class ReviewQueueViewModel(
         viewModelScope.launch {
             try {
                 reviewItemRepository.updateReviewItem(item.copy(eventId = eventId))
+                processOcr(item.id)
             } catch (e: Exception) {
                 DiagnosticLogger.e("ReviewQueueVM", "Error adding photo to group $eventId", e)
             }
@@ -272,6 +289,7 @@ class ReviewQueueViewModel(
 
                 if (eventId != null && eventId > 0L) {
                     reviewItemRepository.updateReviewItem(itemToGroup.copy(eventId = eventId))
+                    processOcr(itemToGroup.id)
                 }
             } catch (e: Exception) {
                 DiagnosticLogger.e("ReviewQueueVM", "Error grouping existing item with active item", e)
@@ -662,7 +680,8 @@ class ReviewQueueViewModelFactory(
     private val receiptParserService: ReceiptParserService? = null,
     private val eventGroupingService: EventGroupingService? = null,
     private val settingsRepository: SettingsRepository? = null,
-    private val photoMoverService: PhotoMoverService? = null
+    private val photoMoverService: PhotoMoverService? = null,
+    private val photoScannerRepository: PhotoScannerRepository? = null
 ) : ViewModelProvider.Factory {
     override fun <T : ViewModel> create(modelClass: Class<T>): T {
         if (modelClass.isAssignableFrom(ReviewQueueViewModel::class.java)) {
@@ -675,7 +694,8 @@ class ReviewQueueViewModelFactory(
                 receiptParserService,
                 eventGroupingService,
                 settingsRepository,
-                photoMoverService
+                photoMoverService,
+                photoScannerRepository
             ) as T
         }
         throw IllegalArgumentException("Unknown ViewModel class")
