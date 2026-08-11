@@ -1,4 +1,4 @@
-﻿package com.schortgen.vehiclelogai.ui.dashboard
+package com.schortgen.vehiclelogai.ui.dashboard
 
 import android.Manifest
 import android.content.pm.PackageManager
@@ -27,6 +27,9 @@ import com.schortgen.vehiclelogai.navigation.Screen
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
@@ -40,6 +43,25 @@ fun DashboardScreen(
     val scope = rememberCoroutineScope()
     var scanResult by remember { mutableIntStateOf(-1) }
     val data by dashboardViewModel.dashboardData.collectAsState()
+
+    // Automatically refresh dashboard data when DashboardScreen is displayed
+    LaunchedEffect(Unit) {
+        dashboardViewModel.refreshDashboard()
+    }
+
+    // Refresh dashboard data when screen resumes
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                dashboardViewModel.refreshDashboard()
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+        }
+    }
 
     val dateFormat = remember { SimpleDateFormat("MMM dd, yyyy", Locale.getDefault()) }
 

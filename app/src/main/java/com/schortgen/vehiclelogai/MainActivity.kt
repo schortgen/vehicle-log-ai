@@ -12,8 +12,11 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.navigation.compose.rememberNavController
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.schortgen.vehiclelogai.navigation.NavGraph
 import com.schortgen.vehiclelogai.ui.components.BottomNavBar
+import com.schortgen.vehiclelogai.ui.dashboard.DashboardViewModel
+import com.schortgen.vehiclelogai.ui.dashboard.DashboardViewModelFactory
 import com.schortgen.vehiclelogai.ui.settings.PhotoDestinationPromptDialog
 import com.schortgen.vehiclelogai.ui.theme.VehicleLogTheme
 
@@ -32,13 +35,31 @@ fun VehicleLogApp() {
     val app = context.applicationContext as VehicleLogAIApplication
     val hasPrompted by app.settingsRepository.hasPromptedPhotoDestination.collectAsState()
 
+    val dashboardViewModel: DashboardViewModel = viewModel(
+        factory = DashboardViewModelFactory(
+            vehicleRepository = app.vehicleRepository,
+            eventRepository = app.eventRepository,
+            reviewItemRepository = app.reviewItemRepository
+        )
+    )
+
     VehicleLogTheme {
         val navController = rememberNavController()
         Scaffold(
-            bottomBar = { BottomNavBar(navController) }
+            bottomBar = {
+                BottomNavBar(
+                    navController = navController,
+                    onDashboardClick = {
+                        dashboardViewModel.refreshDashboard()
+                    }
+                )
+            }
         ) { innerPadding ->
             Surface(modifier = Modifier.padding(innerPadding)) {
-                NavGraph(navController)
+                NavGraph(
+                    navController = navController,
+                    dashboardViewModel = dashboardViewModel
+                )
             }
         }
 

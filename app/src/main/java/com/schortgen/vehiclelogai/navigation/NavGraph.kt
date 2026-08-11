@@ -76,7 +76,10 @@ sealed class Screen(val route: String) {
 }
 
 @Composable
-fun NavGraph(navController: NavHostController) {
+fun NavGraph(
+    navController: NavHostController,
+    dashboardViewModel: DashboardViewModel? = null
+) {
     val context = LocalContext.current
     val app = context.applicationContext as VehicleLogAIApplication
     val vehicleViewModel: VehicleViewModel = viewModel(
@@ -105,7 +108,7 @@ fun NavGraph(navController: NavHostController) {
     val settingsViewModel: SettingsViewModel = viewModel(
         factory = SettingsViewModelFactory(app.settingsRepository, app.backupRepository)
     )
-    val dashboardViewModel: DashboardViewModel = viewModel(
+    val actualDashboardViewModel: DashboardViewModel = dashboardViewModel ?: viewModel(
         factory = DashboardViewModelFactory(
             vehicleRepository = app.vehicleRepository,
             eventRepository = app.eventRepository,
@@ -137,7 +140,7 @@ fun NavGraph(navController: NavHostController) {
         startDestination = Screen.Dashboard.route
     ) {
         composable(Screen.Dashboard.route) {
-            DashboardScreen(navController, dashboardViewModel)
+            DashboardScreen(navController, actualDashboardViewModel)
         }
 
         composable(Screen.Vehicles.route) {

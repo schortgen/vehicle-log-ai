@@ -16,7 +16,10 @@ import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Add
 
 @Composable
-fun BottomNavBar(navController: NavController) {
+fun BottomNavBar(
+    navController: NavController,
+    onDashboardClick: (() -> Unit)? = null
+) {
     val items = listOf(
         Screen.Dashboard,
         Screen.Vehicles,
@@ -66,6 +69,9 @@ fun BottomNavBar(navController: NavController) {
                 },
                 selected = currentRoute == screen.route,
                 onClick = {
+                    if (screen == Screen.Dashboard) {
+                        onDashboardClick?.invoke()
+                    }
                     if (currentRoute != screen.route) {
                         navController.navigate(screen.route) {
                             popUpTo(navController.graph.startDestinationId) {
