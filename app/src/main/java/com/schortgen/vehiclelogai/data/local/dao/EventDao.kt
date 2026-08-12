@@ -23,38 +23,41 @@ interface EventDao {
     @Query("SELECT * FROM events WHERE id = :id")
     suspend fun getById(id: Long): Event?
 
-    @Query("SELECT * FROM events ORDER BY eventDate DESC, id DESC")
+    @Query("SELECT * FROM events WHERE verified = 1 ORDER BY eventDate DESC, id DESC")
     fun observeAll(): Flow<List<Event>>
 
-    @Query("SELECT * FROM events WHERE vehicleId = :vehicleId ORDER BY eventDate DESC, id DESC")
+    @Query("SELECT * FROM events ORDER BY eventDate DESC, id DESC")
+    fun observeAllIncludingUnverified(): Flow<List<Event>>
+
+    @Query("SELECT * FROM events WHERE vehicleId = :vehicleId AND verified = 1 ORDER BY eventDate DESC, id DESC")
     fun observeEventsForVehicle(vehicleId: Long): Flow<List<Event>>
 
-    @Query("SELECT * FROM events WHERE vehicleId = :vehicleId ORDER BY eventDate DESC, id DESC")
+    @Query("SELECT * FROM events WHERE vehicleId = :vehicleId AND verified = 1 ORDER BY eventDate DESC, id DESC")
     suspend fun getEventsForVehicle(vehicleId: Long): List<Event>
 
     // Dashboard aggregate queries
-    @Query("SELECT COUNT(*) FROM events WHERE eventType = 'FUEL' AND eventDate >= :startOfMonth AND eventDate < :startOfNextMonth")
+    @Query("SELECT COUNT(*) FROM events WHERE verified = 1 AND eventType = 'FUEL' AND eventDate >= :startOfMonth AND eventDate < :startOfNextMonth")
     suspend fun countFuelPurchasesThisMonth(startOfMonth: Long, startOfNextMonth: Long): Int
 
-    @Query("SELECT COALESCE(SUM(totalCost), 0) FROM events WHERE eventType = 'FUEL' AND eventDate >= :startOfMonth AND eventDate < :startOfNextMonth")
+    @Query("SELECT COALESCE(SUM(totalCost), 0) FROM events WHERE verified = 1 AND eventType = 'FUEL' AND eventDate >= :startOfMonth AND eventDate < :startOfNextMonth")
     suspend fun sumFuelCostThisMonth(startOfMonth: Long, startOfNextMonth: Long): Double
 
-    @Query("SELECT COALESCE(SUM(totalCost), 0) FROM events WHERE eventType = 'FUEL' AND eventDate >= :startOfYear AND eventDate < :startOfNextYear")
+    @Query("SELECT COALESCE(SUM(totalCost), 0) FROM events WHERE verified = 1 AND eventType = 'FUEL' AND eventDate >= :startOfYear AND eventDate < :startOfNextYear")
     suspend fun sumFuelCostThisYear(startOfYear: Long, startOfNextYear: Long): Double
 
-    @Query("SELECT COALESCE(AVG(totalCost), 0) FROM events WHERE eventType = 'FUEL' AND totalCost IS NOT NULL")
+    @Query("SELECT COALESCE(AVG(totalCost), 0) FROM events WHERE verified = 1 AND eventType = 'FUEL' AND totalCost IS NOT NULL")
     suspend fun averageFuelCost(): Double
 
-    @Query("SELECT * FROM events ORDER BY eventDate DESC, id DESC LIMIT 5")
+    @Query("SELECT * FROM events WHERE verified = 1 ORDER BY eventDate DESC, id DESC LIMIT 5")
     suspend fun getRecentEvents(): List<Event>
 
-    @Query("SELECT * FROM events WHERE vehicleId = :vehicleId AND eventType = 'FUEL' ORDER BY eventDate DESC LIMIT 1")
+    @Query("SELECT * FROM events WHERE vehicleId = :vehicleId AND verified = 1 AND eventType = 'FUEL' ORDER BY eventDate DESC LIMIT 1")
     suspend fun getLastFuelEvent(vehicleId: Long): Event?
 
-    @Query("SELECT COUNT(*) FROM events WHERE vehicleId = :vehicleId AND eventType = 'FUEL'")
+    @Query("SELECT COUNT(*) FROM events WHERE vehicleId = :vehicleId AND verified = 1 AND eventType = 'FUEL'")
     suspend fun countFuelEventsForVehicle(vehicleId: Long): Int
 
-    @Query("SELECT COUNT(*) FROM events")
+    @Query("SELECT COUNT(*) FROM events WHERE verified = 1")
     suspend fun count(): Int
 
     @Query("SELECT * FROM events")

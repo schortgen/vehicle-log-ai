@@ -985,29 +985,16 @@ fun ReviewDetailScreen(
             val baseItems = if (groupItems.isNotEmpty()) groupItems else listOfNotNull(activeItem ?: currentItem)
             val available = reviewItems.filter { it !in groupItems && it !in selectedUngroupedItems }
             if (baseItems.isEmpty()) {
-                available.sortedByDescending { it.captureDate }.take(10)
+                emptyList()
             } else {
                 val combinedItems = baseItems + selectedUngroupedItems
                 val minDate = combinedItems.minOf { it.captureDate }
                 val maxDate = combinedItems.maxOf { it.captureDate }
 
-                val photosBefore = available
-                    .filter { it.captureDate <= minDate }
-                    .sortedByDescending { it.captureDate }
-                    .take(5)
+                val photoBefore = available.filter { it.captureDate <= minDate }.maxByOrNull { it.captureDate }
+                val photoAfter = available.filter { it.captureDate >= maxDate }.minByOrNull { it.captureDate }
 
-                val photosAfter = available
-                    .filter { it.captureDate >= maxDate }
-                    .sortedBy { it.captureDate }
-                    .take(5)
-
-                val results = (photosBefore + photosAfter).distinctBy { it.id }.sortedBy { it.captureDate }
-                if (results.isEmpty()) {
-                    val centerDate = (minDate + maxDate) / 2
-                    available.sortedBy { kotlin.math.abs(it.captureDate - centerDate) }.take(5)
-                } else {
-                    results
-                }
+                listOfNotNull(photoBefore, photoAfter).distinctBy { it.id }.sortedBy { it.captureDate }
             }
         }
 

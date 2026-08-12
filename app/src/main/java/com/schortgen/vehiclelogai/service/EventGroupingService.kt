@@ -27,7 +27,7 @@ class EventGroupingService(
     private val vehicleRepository: VehicleRepository? = null
 ) {
     companion object {
-        const val DEFAULT_GROUPING_WINDOW_MS = 30 * 60 * 1000L // 30 minutes
+        const val DEFAULT_GROUPING_WINDOW_MS = 15 * 60 * 1000L // 15 minutes
         
         // Configurable grouping window (can be overridden)
         var groupingWindowMs: Long = DEFAULT_GROUPING_WINDOW_MS
@@ -362,6 +362,11 @@ class EventGroupingService(
 
         for (cluster in clusters) {
             try {
+                // Skip auto-creating an event if it's a single photo with no clear event type detected from OCR
+                if (cluster.items.size == 1 && cluster.eventType == null) {
+                    continue
+                }
+
                 val event = createEventFromCluster(cluster, targetVehicleId)
                 val eventId = eventRepository.insertEvent(event)
                 val eventWithId = event.copy(id = eventId)

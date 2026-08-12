@@ -35,6 +35,10 @@ class EventRepository(
         return eventDao.observeAll()
     }
 
+    fun observeAllIncludingUnverified(): Flow<List<Event>> {
+        return eventDao.observeAllIncludingUnverified()
+    }
+
     fun observeEventsForVehicle(vehicleId: Long): Flow<List<Event>> {
         return eventDao.observeEventsForVehicle(vehicleId)
     }

@@ -95,7 +95,7 @@ class ReviewQueueViewModel(
             initialValue = emptyList()
         )
 
-    val events: StateFlow<List<Event>> = (eventRepository?.observeAllEvents()
+    val events: StateFlow<List<Event>> = (eventRepository?.observeAllIncludingUnverified()
         ?: kotlinx.coroutines.flow.flowOf(emptyList()))
         .stateIn(
             scope = viewModelScope,
