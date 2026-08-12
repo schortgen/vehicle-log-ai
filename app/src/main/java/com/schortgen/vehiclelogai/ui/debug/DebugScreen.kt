@@ -131,6 +131,12 @@ fun DebugScreen(navController: NavController) {
             }
 
             BuildInfoCard(state.build)
+            if (!state.lastCrashReport.isNullOrBlank()) {
+                CrashReportCard(
+                    report = state.lastCrashReport!!,
+                    onClear = viewModel::clearCrashReport
+                )
+            }
             DatabaseStatsCard(state.database)
             MediaStoreStatsCard(state.stats)
             OcrStatsCard(state.stats)
@@ -287,6 +293,53 @@ private fun RecentLogsCard(lines: List<String>) {
                         )
                     }
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun CrashReportCard(
+    report: String,
+    onClear: () -> Unit
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.errorContainer,
+            contentColor = MaterialTheme.colorScheme.onErrorContainer
+        )
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "⚠️ Uncaught Crash Report",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.error
+                )
+                OutlinedButton(onClick = onClear) {
+                    Text("Clear Crash Log")
+                }
+            }
+            HorizontalDivider(color = MaterialTheme.colorScheme.onErrorContainer.copy(alpha = 0.3f))
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(200.dp)
+                    .verticalScroll(rememberScrollState())
+            ) {
+                Text(
+                    text = report,
+                    style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace)
+                )
             }
         }
     }

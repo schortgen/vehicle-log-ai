@@ -77,6 +77,7 @@ class PhotoScannerService(
     ): Int = withContext(Dispatchers.IO) {
         val startedAt = System.nanoTime()
         DiagnosticLogger.i("Scanner", "scanAndImport begin (range: $startDateMillis .. $endDateMillis)")
+        DiagnosticLogger.logSystemMetrics("Scanner", "Start scan")
         try {
             if (clearQueueFirst) {
                 clearQueue()
@@ -98,7 +99,10 @@ class PhotoScannerService(
             val newReviewItems = mutableListOf<ReviewItem>()
             val newScannedPhotos = mutableListOf<ScannedPhoto>()
 
-            for (candidate in candidates) {
+            for ((index, candidate) in candidates.withIndex()) {
+                if (index > 0 && index % 50 == 0) {
+                    DiagnosticLogger.logSystemMetrics("Scanner", "Scanning photo $index/${candidates.size}")
+                }
                 val candidateMediaId = candidate.uri.substringAfterLast('/')
                 val isAlreadyImported = candidate.mediaStoreId in importedIds ||
                     candidate.uri in existingPaths ||

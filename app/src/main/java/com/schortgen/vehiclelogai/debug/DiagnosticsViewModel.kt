@@ -1,4 +1,4 @@
-﻿package com.schortgen.vehiclelogai.debug
+package com.schortgen.vehiclelogai.debug
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
@@ -41,6 +41,7 @@ data class DiagnosticsUiState(
     val database: DatabaseStats = DatabaseStats(),
     val stats: DiagnosticStats = DiagnosticStats(0, 0, 0, 0, 0.0, 0, 0, 0, 0, 0, 0, 0),
     val recentLogLines: List<String> = emptyList(),
+    val lastCrashReport: String? = null,
     val statusMessage: String? = null,
     val isBusy: Boolean = false
 )
@@ -67,11 +68,20 @@ class DiagnosticsViewModel(
     fun refresh() {
         viewModelScope.launch {
             val db = withContext(Dispatchers.IO) { gatherDatabaseStats() }
+            val crashReport = withContext(Dispatchers.IO) { DiagnosticLogger.getLatestCrashReport() }
             _state.value = _state.value.copy(
                 database = db,
                 stats = DiagnosticLogger.stats(),
-                recentLogLines = DiagnosticLogger.snapshotLines().takeLast(40)
+                recentLogLines = DiagnosticLogger.snapshotLines().takeLast(40),
+                lastCrashReport = crashReport
             )
+        }
+    }
+
+    fun clearCrashReport() {
+        viewModelScope.launch(Dispatchers.IO) {
+            DiagnosticLogger.clearCrashReport()
+            refresh()
         }
     }
 

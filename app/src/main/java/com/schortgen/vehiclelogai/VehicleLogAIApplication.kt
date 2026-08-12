@@ -70,9 +70,9 @@ class VehicleLogAIApplication : Application(), ImageLoaderFactory {
     override fun onCreate() {
         super.onCreate()
 
-        // 0. Initialise the diagnostic logger first so any startup errors below
-        //    get captured. No-op in release builds.
-        DiagnosticLogger.init(this)
+        // 0. Initialise the diagnostic logger and uncaught crash handler first so any errors or crashes
+        //    get captured and saved with CPU & memory metrics.
+        DiagnosticLogger.installUncaughtExceptionHandler(this)
         val startedAt = System.nanoTime()
         DiagnosticLogger.i("App", "onCreate begin")
 

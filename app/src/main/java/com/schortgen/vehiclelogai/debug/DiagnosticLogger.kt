@@ -49,16 +49,12 @@ object DiagnosticLogger {
 
     @Volatile private var initialized: Boolean = false
     @Volatile private var logDir: File? = null
+    @Volatile private var appStartMillis: Long = System.currentTimeMillis()
 
     fun init(context: Context) {
         if (initialized) return
         synchronized(this) {
             if (initialized) return
-            if (!BuildConfig.DEBUG) {
-                // Hard-disable everything for release builds.
-                initialized = true
-                return
-            }
             val dir = File(context.getExternalFilesDir(null), "diagnostics")
             if (!dir.exists()) dir.mkdirs()
             logDir = dir
@@ -77,6 +73,107 @@ object DiagnosticLogger {
         }
     }
 
+    fun installUncaughtExceptionHandler(context: Context) {
+        init(context)
+        val defaultHandler = Thread.getDefaultUncaughtExceptionHandler()
+        Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->
+            try {
+                val report = generateCrashReport(thread, throwable)
+                writeCrashReport(report)
+            } catch (t: Throwable) {
+                Log.e(TAG, "Failed to write crash report", t)
+            } finally {
+                defaultHandler?.uncaughtException(thread, throwable)
+            }
+        }
+    }
+
+    fun getSystemMetricsString(contextLabel: String = ""): String {
+        val runtime = Runtime.getRuntime()
+        val totalMem = runtime.totalMemory()
+        val freeMem = runtime.freeMemory()
+        val maxMem = runtime.maxMemory()
+        val usedMem = totalMem - freeMem
+
+        val usedMb = usedMem / (1024 * 1024)
+        val maxMb = maxMem / (1024 * 1024)
+        val pct = if (maxMem > 0) (usedMem * 100) / maxMem else 0
+
+        val nativeAllocatedMb = android.os.Debug.getNativeHeapAllocatedSize() / (1024 * 1024)
+        val nativeSizeMb = android.os.Debug.getNativeHeapSize() / (1024 * 1024)
+        val processors = runtime.availableProcessors()
+        val activeThreads = Thread.activeCount()
+
+        return buildString {
+            if (contextLabel.isNotBlank()) append('[').append(contextLabel).append("] ")
+            append("Heap: ").append(usedMb).append("MB / ").append(maxMb).append("MB (").append(pct).append("%), ")
+            append("Native: ").append(nativeAllocatedMb).append("MB / ").append(nativeSizeMb).append("MB, ")
+            append("Threads: ").append(activeThreads).append(", Cores: ").append(processors)
+        }
+    }
+
+    fun logSystemMetrics(tag: String, contextLabel: String = "") {
+        val metricsStr = getSystemMetricsString(contextLabel)
+        i(tag, "System Metrics: $metricsStr")
+        val runtime = Runtime.getRuntime()
+        val pct = if (runtime.maxMemory() > 0) ((runtime.totalMemory() - runtime.freeMemory()) * 100) / runtime.maxMemory() else 0
+        if (pct >= 85) {
+            w(tag, "HIGH MEMORY WARNING: Heap usage at $pct%!")
+        }
+    }
+
+    private fun generateCrashReport(thread: Thread, throwable: Throwable): String {
+        val uptimeSeconds = (System.currentTimeMillis() - appStartMillis) / 1000
+        val metrics = getSystemMetricsString("Crash Time")
+
+        return buildString {
+            append("=== VEHICLE LOG AI UNCAUGHT CRASH REPORT ===\n")
+            append("Timestamp: ").append(timeFormat.format(Date())).append('\n')
+            append("App Version: ").append(BuildConfig.VERSION_NAME).append(" (").append(BuildConfig.VERSION_CODE).append(")\n")
+            append("Device: ").append(Build.MANUFACTURER).append(' ').append(Build.MODEL)
+                .append(" (Android ").append(Build.VERSION.RELEASE).append(", SDK ").append(Build.VERSION.SDK_INT).append(")\n")
+            append("App Uptime: ").append(uptimeSeconds).append("s\n")
+            append("Crash Thread: ").append(thread.name).append(" (id: ").append(thread.id).append(")\n")
+            append("Resource Usage: ").append(metrics).append('\n')
+            append('\n')
+            append("--- EXCEPTION DETAILS ---\n")
+            append("Exception: ").append(throwable.javaClass.name).append(": ").append(throwable.message ?: "no message").append('\n')
+            append(Log.getStackTraceString(throwable))
+            append('\n')
+        }
+    }
+
+    private fun writeCrashReport(report: String) {
+        val dir = logDir ?: return
+        try {
+            val lastCrashFile = File(dir, "last_crash.txt")
+            FileWriter(lastCrashFile, false).use { it.write(report) }
+
+            val timestampFile = File(dir, "crash-${fileNameFormat.format(Date())}.txt")
+            FileWriter(timestampFile, false).use { it.write(report) }
+
+            e("CrashHandler", report, null)
+        } catch (t: Throwable) {
+            Log.e(TAG, "Failed writing crash report file", t)
+        }
+    }
+
+    fun getLatestCrashReport(): String? {
+        val dir = logDir ?: return null
+        val file = File(dir, "last_crash.txt")
+        return if (file.exists()) {
+            runCatching { file.readText() }.getOrNull()
+        } else null
+    }
+
+    fun clearCrashReport() {
+        val dir = logDir ?: return
+        val file = File(dir, "last_crash.txt")
+        if (file.exists()) {
+            runCatching { file.delete() }
+        }
+    }
+
     fun v(tag: String, message: String) = log(Log.VERBOSE, tag, message, null)
     fun d(tag: String, message: String) = log(Log.DEBUG, tag, message, null)
     fun i(tag: String, message: String) = log(Log.INFO, tag, message, null)
@@ -84,7 +181,6 @@ object DiagnosticLogger {
     fun e(tag: String, message: String, throwable: Throwable? = null) = log(Log.ERROR, tag, message, throwable)
 
     private fun log(priority: Int, tag: String, message: String, throwable: Throwable?) {
-        if (!BuildConfig.DEBUG) return
         val line = formatLine(priority, tag, message, throwable)
         when (priority) {
             Log.VERBOSE -> Log.v(TAG, line)
