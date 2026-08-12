@@ -2,6 +2,10 @@ package com.schortgen.vehiclelogai
 
 import android.app.Application
 import androidx.room.Room
+import coil.ImageLoader
+import coil.ImageLoaderFactory
+import coil.disk.DiskCache
+import coil.memory.MemoryCache
 import com.schortgen.vehiclelogai.data.local.VehicleLogDatabase
 import com.schortgen.vehiclelogai.data.repository.BackupRepository
 import com.schortgen.vehiclelogai.data.repository.EventRepository
@@ -18,7 +22,25 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
-class VehicleLogAIApplication : Application {
+class VehicleLogAIApplication : Application(), ImageLoaderFactory {
+
+    override fun newImageLoader(): ImageLoader {
+        return ImageLoader.Builder(this)
+            .memoryCache {
+                MemoryCache.Builder(this)
+                    .maxSizePercent(0.25)
+                    .build()
+            }
+            .diskCache {
+                DiskCache.Builder()
+                    .directory(cacheDir.resolve("image_cache"))
+                    .maxSizeBytes(100 * 1024 * 1024) // 100 MB
+                    .build()
+            }
+            .crossfade(true)
+            .respectCacheHeaders(false)
+            .build()
+    }
 
     lateinit var database: VehicleLogDatabase
         private set

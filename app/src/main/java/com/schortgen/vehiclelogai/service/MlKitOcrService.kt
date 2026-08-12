@@ -36,50 +36,59 @@ class MlKitOcrService(private val context: Context) {
             val uri = Uri.parse(imageUri)
             val startTime = System.currentTimeMillis()
 
-            val bitmap = decodeBitmapFromUri(uri)
-            if (bitmap == null) {
-                DiagnosticLogger.w("OCR", "decode failed uri=$imageUri")
-                DiagnosticLogger.recordOcrFailure()
-                return@withContext null
+            var bitmapToRecycle: Bitmap? = null
+            val inputImage = try {
+                InputImage.fromFilePath(context, uri)
+            } catch (e: Exception) {
+                val bm = decodeBitmapFromUri(uri)
+                if (bm == null) {
+                    DiagnosticLogger.w("OCR", "decode failed uri=$imageUri")
+                    DiagnosticLogger.recordOcrFailure()
+                    return@withContext null
+                }
+                bitmapToRecycle = bm
+                InputImage.fromBitmap(bm, 0)
             }
 
-            val inputImage = InputImage.fromBitmap(bitmap, 0)
+            try {
+                val task = recognizer.process(inputImage)
+                val visionText = Tasks.await(task, 30, TimeUnit.SECONDS)
+                val processingTime = System.currentTimeMillis() - startTime
 
-            val task = recognizer.process(inputImage)
-            val visionText = Tasks.await(task, 30, TimeUnit.SECONDS)
-            val processingTime = System.currentTimeMillis() - startTime
+                val formattedText = formatTextLeftToRightLineByLine(visionText)
+                val rawText = formattedText.ifBlank { visionText.text }
+                if (rawText.isBlank()) {
+                    DiagnosticLogger.recordOcrSuccess(processingTime)
+                    DiagnosticLogger.i("OCR", "recognizeImage empty uri=$imageUri timeMs=$processingTime")
+                    return@withContext OcrResult(
+                        rawText = "",
+                        processingTimeMs = processingTime,
+                        confidence = null,
+                        blockCount = 0,
+                        lineCount = 0
+                    )
+                }
 
-            val formattedText = formatTextLeftToRightLineByLine(visionText)
-            val rawText = formattedText.ifBlank { visionText.text }
-            if (rawText.isBlank()) {
+                val blockCount = visionText.textBlocks.size
+                val lineCount = visionText.textBlocks.sumOf { block -> block.lines.size }
+
                 DiagnosticLogger.recordOcrSuccess(processingTime)
-                DiagnosticLogger.i("OCR", "recognizeImage empty uri=$imageUri timeMs=$processingTime")
-                return@withContext OcrResult(
-                    rawText = "",
+                val totalMs = (System.nanoTime() - startedAt) / 1_000_000
+                DiagnosticLogger.i(
+                    "OCR",
+                    "recognizeImage ok uri=$imageUri timeMs=$processingTime totalMs=$totalMs blocks=$blockCount lines=$lineCount chars=${rawText.length}"
+                )
+
+                OcrResult(
+                    rawText = rawText,
                     processingTimeMs = processingTime,
                     confidence = null,
-                    blockCount = 0,
-                    lineCount = 0
+                    blockCount = blockCount,
+                    lineCount = lineCount
                 )
+            } finally {
+                bitmapToRecycle?.recycle()
             }
-
-            val blockCount = visionText.textBlocks.size
-            val lineCount = visionText.textBlocks.sumOf { block -> block.lines.size }
-
-            DiagnosticLogger.recordOcrSuccess(processingTime)
-            val totalMs = (System.nanoTime() - startedAt) / 1_000_000
-            DiagnosticLogger.i(
-                "OCR",
-                "recognizeImage ok uri=$imageUri timeMs=$processingTime totalMs=$totalMs blocks=$blockCount lines=$lineCount chars=${rawText.length}"
-            )
-
-            OcrResult(
-                rawText = rawText,
-                processingTimeMs = processingTime,
-                confidence = null,
-                blockCount = blockCount,
-                lineCount = lineCount
-            )
         } catch (e: Exception) {
             DiagnosticLogger.recordOcrFailure()
             DiagnosticLogger.e("OCR", "recognizeImage failed uri=$imageUri", e)

@@ -165,12 +165,16 @@ class PhotoScannerService(
                 importedCount++
             }
 
-            // Perform batch inserts to avoid hundreds of database transactions and UI re-triggers
+            // Perform batch inserts in chunks of 100 to avoid SQLite parameter limits and memory pressure
             if (newReviewItems.isNotEmpty()) {
-                reviewItemRepository.insertAllReviewItems(newReviewItems)
+                newReviewItems.chunked(100).forEach { chunk ->
+                    reviewItemRepository.insertAllReviewItems(chunk)
+                }
             }
             if (newScannedPhotos.isNotEmpty()) {
-                photoScannerRepository.markAllAsImported(newScannedPhotos)
+                newScannedPhotos.chunked(100).forEach { chunk ->
+                    photoScannerRepository.markAllAsImported(chunk)
+                }
             }
 
             val elapsedMs = (System.nanoTime() - startedAt) / 1_000_000

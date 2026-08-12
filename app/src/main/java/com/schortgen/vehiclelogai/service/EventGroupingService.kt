@@ -106,8 +106,8 @@ class EventGroupingService(
                 val lastItem = currentCluster.last()
                 val timeDiff = kotlin.math.abs(item.captureDate - lastItem.captureDate)
 
-                if (timeDiff <= groupingWindowMs || isSameCalendarDay(item.captureDate, lastItem.captureDate)) {
-                    // Add to current cluster
+                if (timeDiff <= groupingWindowMs) {
+                    // Add to current cluster if captured within time window
                     currentCluster.add(item)
                 } else {
                     // Start a new cluster
@@ -328,23 +328,56 @@ class EventGroupingService(
         }
 
         val clusters = groupItemsIntoClusters(ungroupedItems)
+        if (clusters.isEmpty()) {
+            return@withContext emptyList()
+        }
+
+        // Resolve target vehicle ID if defaultVehicleId is null
+        var targetVehicleId = defaultVehicleId
+        if (targetVehicleId == null || targetVehicleId <= 0L) {
+            try {
+                val vehicles = vehicleRepository?.getAllVehicles()
+                if (!vehicles.isNullOrEmpty()) {
+                    targetVehicleId = vehicles.first().id
+                } else {
+                    val defaultVehicle = com.schortgen.vehiclelogai.data.models.Vehicle(
+                        nickname = "My Vehicle",
+                        make = "",
+                        model = "",
+                        year = 2024
+                    )
+                    targetVehicleId = vehicleRepository?.insertVehicle(defaultVehicle)
+                }
+            } catch (e: Exception) {
+                // Ignore failure if vehicle repo unavailable
+            }
+        }
+
+        if (targetVehicleId == null || targetVehicleId <= 0L) {
+            return@withContext emptyList()
+        }
+
         val createdEvents = mutableListOf<Event>()
+        val allUpdatedItems = mutableListOf<ReviewItem>()
 
         for (cluster in clusters) {
             try {
-                val event = createEventFromCluster(cluster, defaultVehicleId)
+                val event = createEventFromCluster(cluster, targetVehicleId)
                 val eventId = eventRepository.insertEvent(event)
                 val eventWithId = event.copy(id = eventId)
 
-                // Update all ReviewItems in this cluster with the eventId
                 val updatedItems = cluster.items.map { it.copy(eventId = eventId) }
-                reviewItemRepository?.updateAllReviewItems(updatedItems)
+                allUpdatedItems.addAll(updatedItems)
 
                 createdEvents.add(eventWithId)
             } catch (e: Exception) {
-                // Log error but continue with other clusters
-                // Could happen if no vehicleId available for a cluster
                 continue
+            }
+        }
+
+        if (allUpdatedItems.isNotEmpty()) {
+            allUpdatedItems.chunked(100).forEach { chunk ->
+                reviewItemRepository?.updateAllReviewItems(chunk)
             }
         }
 

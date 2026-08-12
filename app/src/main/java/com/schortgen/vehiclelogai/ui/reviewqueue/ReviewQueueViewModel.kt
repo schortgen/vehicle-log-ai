@@ -110,10 +110,12 @@ class ReviewQueueViewModel(
         // Find all Events that are NOT verified (temporary groupings)
         val unverifiedEvents = allEvents.filter { !it.verified }
 
+        val itemsByEventId = items.groupBy { it.eventId }
+
         // Create Grouped representation
         val groupedList = unverifiedEvents.mapNotNull { event ->
-            val eventItems = items.filter { it.eventId == event.id }
-            if (eventItems.isEmpty()) null else ReviewQueueItem.Grouped(event, eventItems)
+            val eventItems = itemsByEventId[event.id]
+            if (eventItems.isNullOrEmpty()) null else ReviewQueueItem.Grouped(event, eventItems)
         }
 
         // Find standalone items (not complete and not grouped)
@@ -625,7 +627,7 @@ class ReviewQueueViewModel(
     fun processOcr(reviewItemId: Long) {
         val ocrService = mlKitOcrService ?: return
         val parser = receiptParserService ?: return
-        viewModelScope.launch {
+        viewModelScope.launch(Dispatchers.IO) {
             val item = reviewItemRepository.getReviewItemById(reviewItemId) ?: return@launch
             val photoPath = item.photoPath ?: return@launch
 
