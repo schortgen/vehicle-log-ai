@@ -358,7 +358,14 @@ fun SettingsScreen(
 
                             OutlinedButton(
                                 onClick = {
-                                    restoreLauncher.launch(arrayOf("application/json", "*/*"))
+                                    restoreLauncher.launch(
+                                        arrayOf(
+                                            "application/json",
+                                            "text/json",
+                                            "text/plain",
+                                            "application/octet-stream"
+                                        )
+                                    )
                                 },
                                 modifier = Modifier.weight(1f)
                             ) {

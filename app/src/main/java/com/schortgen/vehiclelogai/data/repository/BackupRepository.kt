@@ -55,6 +55,11 @@ class BackupRepository(
 
     suspend fun importBackup(context: Context, uri: Uri, clearExisting: Boolean = true): Result<BackupData> = withContext(Dispatchers.IO) {
         try {
+            val mimeType = context.contentResolver.getType(uri)
+            if (mimeType?.startsWith("image/") == true) {
+                return@withContext Result.failure(Exception("Selected file is an image/photo. Please select a valid JSON backup file."))
+            }
+
             val backupData = context.contentResolver.openInputStream(uri)?.use { inputStream ->
                 InputStreamReader(inputStream, Charsets.UTF_8).use { reader ->
                     gson.fromJson(reader, BackupData::class.java)
