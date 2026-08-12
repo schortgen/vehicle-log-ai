@@ -1,8 +1,10 @@
 package com.schortgen.vehiclelogai.ui.settings
 
+import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContract
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -75,7 +77,7 @@ fun SettingsScreen(
     }
 
     val restoreLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.OpenDocument()
+        contract = OpenBackupDocumentContract()
     ) { uri ->
         if (uri != null) {
             pendingRestoreUri = uri
@@ -514,3 +516,22 @@ fun SettingsScreen(
         )
     }
 }
+
+class OpenBackupDocumentContract : ActivityResultContract<Array<String>, Uri?>() {
+    override fun createIntent(context: Context, input: Array<String>): Intent {
+        return Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+            addCategory(Intent.CATEGORY_OPENABLE)
+            // Setting a specific non-media type ("application/json") instead of "*/*"
+            // instructs the system file picker to filter out and hide image/photo files completely
+            type = "application/json"
+            if (input.isNotEmpty()) {
+                putExtra(Intent.EXTRA_MIME_TYPES, input)
+            }
+        }
+    }
+
+    override fun parseResult(resultCode: Int, intent: Intent?): Uri? {
+        return if (resultCode == android.app.Activity.RESULT_OK) intent?.data else null
+    }
+}
+
