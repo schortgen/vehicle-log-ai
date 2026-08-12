@@ -983,18 +983,31 @@ fun ReviewDetailScreen(
     if (showAddPhotoDialog) {
         val ungroupedList = remember(reviewItems, groupItems, selectedUngroupedItems.toList()) {
             val baseItems = if (groupItems.isNotEmpty()) groupItems else listOfNotNull(activeItem ?: currentItem)
-            val available = reviewItems.filter { it.eventId == null && it !in groupItems && it !in selectedUngroupedItems }
+            val available = reviewItems.filter { it !in groupItems && it !in selectedUngroupedItems }
             if (baseItems.isEmpty()) {
-                available.take(2)
+                available.sortedByDescending { it.captureDate }.take(10)
             } else {
                 val combinedItems = baseItems + selectedUngroupedItems
                 val minDate = combinedItems.minOf { it.captureDate }
                 val maxDate = combinedItems.maxOf { it.captureDate }
 
-                val photoBefore = available.filter { it.captureDate <= minDate }.maxByOrNull { it.captureDate }
-                val photoAfter = available.filter { it.captureDate >= maxDate }.minByOrNull { it.captureDate }
+                val photosBefore = available
+                    .filter { it.captureDate <= minDate }
+                    .sortedByDescending { it.captureDate }
+                    .take(5)
 
-                listOfNotNull(photoBefore, photoAfter).distinctBy { it.id }.sortedBy { it.captureDate }
+                val photosAfter = available
+                    .filter { it.captureDate >= maxDate }
+                    .sortedBy { it.captureDate }
+                    .take(5)
+
+                val results = (photosBefore + photosAfter).distinctBy { it.id }.sortedBy { it.captureDate }
+                if (results.isEmpty()) {
+                    val centerDate = (minDate + maxDate) / 2
+                    available.sortedBy { kotlin.math.abs(it.captureDate - centerDate) }.take(5)
+                } else {
+                    results
+                }
             }
         }
 
@@ -1040,7 +1053,10 @@ fun ReviewDetailScreen(
                                 } else {
                                     true
                                 }
-                                val labelText = if (isBefore) "Earlier" else "Later"
+                                val targetRefDate = if (isBefore) baseMinDate else baseMaxDate
+                                val diffMinutes = if (targetRefDate > 0L) kotlin.math.abs(uItem.captureDate - targetRefDate) / 60000L else 0L
+                                val formattedDiff = if (diffMinutes < 60) "${diffMinutes}m" else "${diffMinutes / 60}h ${diffMinutes % 60}m"
+                                val labelText = if (isBefore) "Earlier (-$formattedDiff)" else "Later (+$formattedDiff)"
 
                                 Surface(
                                     modifier = Modifier
@@ -1155,7 +1171,10 @@ fun ReviewDetailScreen(
                                 } else {
                                     true
                                 }
-                                val labelText = if (isBefore) "Earlier" else "Later"
+                                val targetRefDate = if (isBefore) baseMinDate else baseMaxDate
+                                val diffMinutes = if (targetRefDate > 0L) kotlin.math.abs(uItem.captureDate - targetRefDate) / 60000L else 0L
+                                val formattedDiff = if (diffMinutes < 60) "${diffMinutes}m" else "${diffMinutes / 60}h ${diffMinutes % 60}m"
+                                val labelText = if (isBefore) "Earlier (-$formattedDiff)" else "Later (+$formattedDiff)"
 
                                 Box(
                                     modifier = Modifier

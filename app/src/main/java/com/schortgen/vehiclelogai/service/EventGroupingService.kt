@@ -27,7 +27,7 @@ class EventGroupingService(
     private val vehicleRepository: VehicleRepository? = null
 ) {
     companion object {
-        const val DEFAULT_GROUPING_WINDOW_MS = 15 * 60 * 1000L // 15 minutes
+        const val DEFAULT_GROUPING_WINDOW_MS = 30 * 60 * 1000L // 30 minutes
         
         // Configurable grouping window (can be overridden)
         var groupingWindowMs: Long = DEFAULT_GROUPING_WINDOW_MS
