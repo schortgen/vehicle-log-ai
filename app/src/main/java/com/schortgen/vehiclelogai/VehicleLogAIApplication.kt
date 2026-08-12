@@ -65,8 +65,6 @@ class VehicleLogAIApplication : Application(), ImageLoaderFactory {
     lateinit var backupRepository: BackupRepository
         private set
 
-    constructor() : super()
-
     private val appStartNanos: Long = System.nanoTime()
 
     override fun onCreate() {

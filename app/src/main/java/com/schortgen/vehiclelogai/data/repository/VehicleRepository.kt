@@ -1,4 +1,4 @@
-﻿package com.schortgen.vehiclelogai.data.repository
+package com.schortgen.vehiclelogai.data.repository
 
 import com.schortgen.vehiclelogai.data.local.dao.VehicleDao
 import com.schortgen.vehiclelogai.data.models.Vehicle
@@ -23,6 +23,10 @@ class VehicleRepository(private val vehicleDao: VehicleDao) {
 
     fun observeAllVehicles(): Flow<List<Vehicle>> {
         return vehicleDao.observeAll()
+    }
+
+    suspend fun getAllVehicles(): List<Vehicle> {
+        return vehicleDao.getAllVehicles()
     }
 
     suspend fun countVehicles(): Int = vehicleDao.count()
