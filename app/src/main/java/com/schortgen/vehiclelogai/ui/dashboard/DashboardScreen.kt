@@ -109,14 +109,12 @@ fun DashboardScreen(
             verticalArrangement = Arrangement.spacedBy(12.dp),
             contentPadding = PaddingValues(vertical = 16.dp)
         ) {
-            // Welcome card. Long-press opens the hidden Debug screen in debug builds only.
+            // Welcome card. Long-press opens the Debug screen.
             item {
-                val longClickHandler: (() -> Unit)? = if (BuildConfig.DEBUG) {
-                    {
-                        DiagnosticLogger.d("Debug", "Long-press: opening debug screen")
-                        navController.navigate(Screen.Debug.route)
-                    }
-                } else null
+                val longClickHandler: () -> Unit = {
+                    DiagnosticLogger.d("Debug", "Long-press: opening debug screen")
+                    navController.navigate(Screen.Debug.route)
+                }
                 Card(
                     modifier = Modifier
                         .fillMaxWidth()
