@@ -36,19 +36,14 @@ class MlKitOcrService(private val context: Context) {
             val uri = Uri.parse(imageUri)
             val startTime = System.currentTimeMillis()
 
-            var bitmapToRecycle: Bitmap? = null
-            val inputImage = try {
-                InputImage.fromFilePath(context, uri)
-            } catch (e: Exception) {
-                val bm = decodeBitmapFromUri(uri)
-                if (bm == null) {
-                    DiagnosticLogger.w("OCR", "decode failed uri=$imageUri")
-                    DiagnosticLogger.recordOcrFailure()
-                    return@withContext null
-                }
-                bitmapToRecycle = bm
-                InputImage.fromBitmap(bm, 0)
+            val bm = decodeBitmapFromUri(uri)
+            if (bm == null) {
+                DiagnosticLogger.w("OCR", "decode failed uri=$imageUri")
+                DiagnosticLogger.recordOcrFailure()
+                return@withContext null
             }
+            val bitmapToRecycle = bm
+            val inputImage = InputImage.fromBitmap(bm, 0)
 
             try {
                 val task = recognizer.process(inputImage)
@@ -105,12 +100,13 @@ class MlKitOcrService(private val context: Context) {
                 BitmapFactory.decodeStream(inputStream, null, options)
             }
 
-            val targetSize = 1920
+            val targetSize = 1280
             options.inSampleSize = calculateInSampleSize(
                 options.outWidth, options.outHeight, targetSize
             )
 
             options.inJustDecodeBounds = false
+            options.inPreferredConfig = Bitmap.Config.RGB_565 // Use RGB_565 (2 bytes per pixel instead of 4) for ML Kit OCR to halve RAM footprint
             context.contentResolver.openInputStream(uri)?.use { inputStream ->
                 BitmapFactory.decodeStream(inputStream, null, options)
             }
@@ -127,9 +123,7 @@ class MlKitOcrService(private val context: Context) {
         if (rawHeight > targetSize || rawWidth > targetSize) {
             val halfHeight = rawHeight / 2
             val halfWidth = rawWidth / 2
-            while (halfHeight / inSampleSize >= targetSize
-                && halfWidth / inSampleSize >= targetSize
-            ) {
+            while ((halfHeight / inSampleSize) >= targetSize || (halfWidth / inSampleSize) >= targetSize) {
                 inSampleSize *= 2
             }
         }

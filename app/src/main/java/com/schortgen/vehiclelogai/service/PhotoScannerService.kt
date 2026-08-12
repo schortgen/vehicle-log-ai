@@ -17,6 +17,7 @@ import com.schortgen.vehiclelogai.data.repository.ReviewItemRepository
 import com.schortgen.vehiclelogai.debug.DiagnosticLogger
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.yield
 
 /**
  * Scans the Android MediaStore for new image files, filters out screenshots,
@@ -102,6 +103,7 @@ class PhotoScannerService(
             for ((index, candidate) in candidates.withIndex()) {
                 if (index > 0 && index % 50 == 0) {
                     DiagnosticLogger.logSystemMetrics("Scanner", "Scanning photo $index/${candidates.size}")
+                    yield()
                 }
                 val candidateMediaId = candidate.uri.substringAfterLast('/')
                 val isAlreadyImported = candidate.mediaStoreId in importedIds ||
@@ -167,18 +169,26 @@ class PhotoScannerService(
                     existingMediaIds.add(candidateMediaId)
                 }
                 importedCount++
+
+                // Flush incrementally in batches of 50 to prevent memory list growth
+                if (newReviewItems.size >= 50) {
+                    reviewItemRepository.insertAllReviewItems(newReviewItems.toList())
+                    newReviewItems.clear()
+                }
+                if (newScannedPhotos.size >= 50) {
+                    photoScannerRepository.markAllAsImported(newScannedPhotos.toList())
+                    newScannedPhotos.clear()
+                }
             }
 
-            // Perform batch inserts in chunks of 100 to avoid SQLite parameter limits and memory pressure
+            // Flush remaining batch
             if (newReviewItems.isNotEmpty()) {
-                newReviewItems.chunked(100).forEach { chunk ->
-                    reviewItemRepository.insertAllReviewItems(chunk)
-                }
+                reviewItemRepository.insertAllReviewItems(newReviewItems.toList())
+                newReviewItems.clear()
             }
             if (newScannedPhotos.isNotEmpty()) {
-                newScannedPhotos.chunked(100).forEach { chunk ->
-                    photoScannerRepository.markAllAsImported(chunk)
-                }
+                photoScannerRepository.markAllAsImported(newScannedPhotos.toList())
+                newScannedPhotos.clear()
             }
 
             val elapsedMs = (System.nanoTime() - startedAt) / 1_000_000
@@ -319,21 +329,9 @@ class PhotoScannerService(
                 val bucketName = c.getString(bucketCol)
                 val uri = ContentUris.withAppendedId(collectionUri, id).toString()
 
-                // If width/height are zero, probe image bounds as fallback
-                if (width <= 0 || height <= 0) {
-                    try {
-                        context.contentResolver.openInputStream(Uri.parse(uri))?.use { stream ->
-                            val opts = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-                            BitmapFactory.decodeStream(stream, null, opts)
-                            if (opts.outWidth > 0 && opts.outHeight > 0) {
-                                width = opts.outWidth
-                                height = opts.outHeight
-                            }
-                        }
-                    } catch (t: Throwable) {
-                        DiagnosticLogger.d("Scanner", "Failed to decode bounds for $uri: ${t.message}")
-                    }
-                }
+                // If width/height are zero in MediaStore, default to 1000px so we do not open FileInputStreams during cursor read
+                if (width <= 0) width = 1000
+                if (height <= 0) height = 1000
 
                 // Accept blank/unknown mime - try to query ContentResolver if blank
                 if (mime.isBlank()) {
