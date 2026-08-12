@@ -18,7 +18,8 @@ import androidx.room.PrimaryKey
     indices = [
         Index(value = ["eventId"]),
         Index(value = ["vehicleId"]),
-        Index(value = ["captureDate"])
+        Index(value = ["captureDate"]),
+        Index(value = ["photoPath"])
     ]
 )
 data class ReviewItem(

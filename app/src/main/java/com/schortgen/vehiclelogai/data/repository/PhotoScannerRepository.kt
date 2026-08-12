@@ -17,6 +17,12 @@ class PhotoScannerRepository(private val scannedPhotoDao: ScannedPhotoDao) {
         scannedPhotoDao.insert(scannedPhoto)
     }
 
+    suspend fun markAllAsImported(scannedPhotos: List<ScannedPhoto>) {
+        if (scannedPhotos.isNotEmpty()) {
+            scannedPhotoDao.insertAll(scannedPhotos)
+        }
+    }
+
     suspend fun getAllImportedIds(): List<Long> {
         return scannedPhotoDao.getAllMediaStoreIds()
     }

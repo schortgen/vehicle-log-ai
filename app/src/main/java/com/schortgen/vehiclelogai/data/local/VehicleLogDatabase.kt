@@ -16,7 +16,7 @@ import com.schortgen.vehiclelogai.data.models.Vehicle
 
 @Database(
     entities = [Vehicle::class, Event::class, ReviewItem::class, ScannedPhoto::class],
-    version = 6, // Incremented to account for eventId foreign key changes
+    version = 7, // Incremented for photoPath index
     exportSchema = false
 )
 @TypeConverters(EventTypeConverter::class, ProcessingStatusConverter::class)

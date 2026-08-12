@@ -89,57 +89,55 @@ class PhotoScannerService(
             var skippedType = 0
             var skippedVehicleRelated = 0
 
+            // Pre-fetch existing state into in-memory sets for O(1) bulk lookups
+            val importedIds = photoScannerRepository.getAllImportedIds().toMutableSet()
+            val existingReviewItems = reviewItemRepository.getAllReviewItems()
+            val existingPaths = existingReviewItems.mapNotNull { it.photoPath }.toMutableSet()
+            val existingMediaIds = existingReviewItems.mapNotNull { it.photoPath?.substringAfterLast('/') }.toMutableSet()
+
+            val newReviewItems = mutableListOf<ReviewItem>()
+            val newScannedPhotos = mutableListOf<ScannedPhoto>()
+
             for (candidate in candidates) {
-                if (photoScannerRepository.isAlreadyImported(candidate.mediaStoreId) ||
-                    reviewItemRepository.getByPhotoPath(candidate.uri) != null
-                ) {
+                val candidateMediaId = candidate.uri.substringAfterLast('/')
+                val isAlreadyImported = candidate.mediaStoreId in importedIds ||
+                    candidate.uri in existingPaths ||
+                    (candidateMediaId.isNotEmpty() && candidateMediaId in existingMediaIds)
+
+                if (isAlreadyImported) {
                     skippedAlreadyImported++
-                    photoScannerRepository.markAsImported(
-                        ScannedPhoto(
-                            mediaStoreId = candidate.mediaStoreId,
-                            uri = candidate.uri,
-                            displayName = candidate.displayName,
-                            dateTaken = candidate.dateTaken
+                    if (candidate.mediaStoreId !in importedIds) {
+                        newScannedPhotos.add(
+                            ScannedPhoto(
+                                mediaStoreId = candidate.mediaStoreId,
+                                uri = candidate.uri,
+                                displayName = candidate.displayName,
+                                dateTaken = candidate.dateTaken
+                            )
                         )
-                    )
-                    DiagnosticLogger.d("Scanner", "skip already imported id=${candidate.mediaStoreId} name=${candidate.displayName}")
+                        importedIds.add(candidate.mediaStoreId)
+                    }
                     continue
                 }
 
                 if (looksLikeScreenshot(candidate.displayName, candidate.bucket)) {
                     skippedScreenshots++
-                    DiagnosticLogger.d(
-                        "Scanner",
-                        "skip screenshot mediaStoreId=${candidate.mediaStoreId} name=${candidate.displayName} bucket=${candidate.bucket}"
-                    )
                     continue
                 }
 
-                if (candidate.width < minDimension || candidate.height < minDimension) {
+                if (candidate.width in 1..<minDimension || candidate.height in 1..<minDimension) {
                     skippedSmall++
-                    DiagnosticLogger.d(
-                        "Scanner",
-                        "skip small mediaStoreId=${candidate.mediaStoreId} ${candidate.width}x${candidate.height} name=${candidate.displayName}"
-                    )
                     continue
                 }
 
                 if (candidate.mimeType.isNotBlank() && candidate.mimeType !in supportedMimeTypes) {
                     skippedType++
-                    DiagnosticLogger.d(
-                        "Scanner",
-                        "skip mime mediaStoreId=${candidate.mediaStoreId} mime=${candidate.mimeType} name=${candidate.displayName}"
-                    )
                     continue
                 }
 
                 // Filter out images that are unlikely to be vehicle-related based on filename heuristics
                 if (!isVehicleRelated(candidate, candidate.bucket)) {
                     skippedVehicleRelated++
-                    DiagnosticLogger.d(
-                        "Scanner",
-                        "skip non-vehicle mediaStoreId=${candidate.mediaStoreId} name=${candidate.displayName} bucket=${candidate.bucket}"
-                    )
                     continue
                 }
 
@@ -149,17 +147,30 @@ class PhotoScannerService(
                     status = ProcessingStatus.PENDING,
                     reason = "Imported: ${candidate.displayName}"
                 )
-                reviewItemRepository.insertReviewItem(reviewItem)
+                newReviewItems.add(reviewItem)
 
-                photoScannerRepository.markAsImported(
-                    ScannedPhoto(
-                        mediaStoreId = candidate.mediaStoreId,
-                        uri = candidate.uri,
-                        displayName = candidate.displayName,
-                        dateTaken = candidate.dateTaken
-                    )
+                val scannedPhoto = ScannedPhoto(
+                    mediaStoreId = candidate.mediaStoreId,
+                    uri = candidate.uri,
+                    displayName = candidate.displayName,
+                    dateTaken = candidate.dateTaken
                 )
+                newScannedPhotos.add(scannedPhoto)
+
+                importedIds.add(candidate.mediaStoreId)
+                existingPaths.add(candidate.uri)
+                if (candidateMediaId.isNotEmpty()) {
+                    existingMediaIds.add(candidateMediaId)
+                }
                 importedCount++
+            }
+
+            // Perform batch inserts to avoid hundreds of database transactions and UI re-triggers
+            if (newReviewItems.isNotEmpty()) {
+                reviewItemRepository.insertAllReviewItems(newReviewItems)
+            }
+            if (newScannedPhotos.isNotEmpty()) {
+                photoScannerRepository.markAllAsImported(newScannedPhotos)
             }
 
             val elapsedMs = (System.nanoTime() - startedAt) / 1_000_000

@@ -16,6 +16,12 @@ class ReviewItemRepository(private val reviewItemDao: ReviewItemDao) {
         return reviewItemDao.insert(reviewItem)
     }
 
+    suspend fun insertAllReviewItems(reviewItems: List<ReviewItem>) {
+        if (reviewItems.isNotEmpty()) {
+            reviewItemDao.insertAll(reviewItems)
+        }
+    }
+
     suspend fun getByPhotoPath(photoPath: String?): ReviewItem? {
         if (photoPath.isNullOrBlank()) return null
         val directMatch = reviewItemDao.getByPhotoPath(photoPath)

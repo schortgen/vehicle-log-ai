@@ -1,4 +1,4 @@
-﻿package com.schortgen.vehiclelogai.debug
+package com.schortgen.vehiclelogai.debug
 
 import android.content.Context
 import android.os.Build
@@ -62,6 +62,7 @@ object DiagnosticLogger {
             val dir = File(context.getExternalFilesDir(null), "diagnostics")
             if (!dir.exists()) dir.mkdirs()
             logDir = dir
+            pruneOldFiles(dir)
             initialized = true
             i(
                 "DiagnosticLogger",
@@ -124,7 +125,6 @@ object DiagnosticLogger {
         try {
             val file = File(dir, "diagnostics.log")
             FileWriter(file, true).use { it.append(line).append('\n') }
-            pruneOldFiles(dir)
         } catch (t: Throwable) {
             Log.w(TAG, "Failed to write diagnostic log file: ${t.message}")
         }
