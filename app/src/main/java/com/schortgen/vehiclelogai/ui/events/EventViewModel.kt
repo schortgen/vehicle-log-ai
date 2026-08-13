@@ -43,6 +43,14 @@ class EventViewModel(
     fun updateEvent(event: Event) {
         viewModelScope.launch {
             repository.updateEvent(event)
+            val odo = event.odometer
+            val vehId = event.vehicleId
+            if (odo != null && vehId != null && vehicleRepository != null) {
+                val vehicle = vehicleRepository.getVehicleById(vehId)
+                if (vehicle != null && odo > (vehicle.currentMileage ?: 0)) {
+                    vehicleRepository.updateVehicle(vehicle.copy(currentMileage = odo))
+                }
+            }
         }
     }
 

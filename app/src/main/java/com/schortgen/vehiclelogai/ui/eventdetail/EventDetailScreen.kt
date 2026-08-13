@@ -119,6 +119,7 @@ fun EventDetailScreen(
         eventViewModel.updateEvent(updated)
         event = updated
         isEditing = false
+        navController.popBackStack()
     }
 
     fun saveUpdatedEvent(updated: Event) {
@@ -550,6 +551,7 @@ fun EventDetailScreen(
                                         eventDate = selectedDateMillis,
                                         notes = editNotes.ifBlank { null },
                                         odometer = editOdometer.toIntOrNull() ?: ev.odometer,
+                                        tripDistance = editTripDistance.toDoubleOrNull() ?: ev.tripDistance,
                                         gallons = if (ev.eventType == EventType.FUEL) editGallons.toDoubleOrNull() ?: ev.gallons else ev.gallons,
                                         pricePerGallon = editPricePerGallon.toDoubleOrNull() ?: ev.pricePerGallon,
                                         totalCost = editTotalCost.toDoubleOrNull() ?: ev.totalCost,
