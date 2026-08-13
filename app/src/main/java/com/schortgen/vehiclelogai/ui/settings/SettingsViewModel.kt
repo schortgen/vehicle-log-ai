@@ -8,10 +8,14 @@ import androidx.lifecycle.viewModelScope
 import com.schortgen.vehiclelogai.data.repository.BackupRepository
 import com.schortgen.vehiclelogai.data.repository.PreferredTripMeter
 import com.schortgen.vehiclelogai.data.repository.SettingsRepository
+import com.schortgen.vehiclelogai.util.BackupFileItem
+import com.schortgen.vehiclelogai.util.BackupFileScanner
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class SettingsViewModel(
     private val settingsRepository: SettingsRepository,
@@ -29,6 +33,34 @@ class SettingsViewModel(
 
     private val _backupStatusMessage = MutableStateFlow<String?>(null)
     val backupStatusMessage: StateFlow<String?> = _backupStatusMessage.asStateFlow()
+
+    private val _discoveredBackupFiles = MutableStateFlow<List<BackupFileItem>>(emptyList())
+    val discoveredBackupFiles: StateFlow<List<BackupFileItem>> = _discoveredBackupFiles.asStateFlow()
+
+    private val _isScanningBackups = MutableStateFlow(false)
+    val isScanningBackups: StateFlow<Boolean> = _isScanningBackups.asStateFlow()
+
+    fun scanForBackupFiles(context: Context) {
+        viewModelScope.launch {
+            _isScanningBackups.value = true
+            val results = withContext(Dispatchers.IO) {
+                BackupFileScanner.scanDeviceForBackups(context)
+            }
+            _discoveredBackupFiles.value = results
+            _isScanningBackups.value = false
+        }
+    }
+
+    fun scanFolderTreeUri(context: Context, treeUri: Uri) {
+        viewModelScope.launch {
+            _isScanningBackups.value = true
+            val results = withContext(Dispatchers.IO) {
+                BackupFileScanner.scanDocumentTree(context, treeUri)
+            }
+            _discoveredBackupFiles.value = results
+            _isScanningBackups.value = false
+        }
+    }
 
     fun updatePreferredTripMeter(meter: PreferredTripMeter) {
         settingsRepository.setPreferredTripMeter(meter)

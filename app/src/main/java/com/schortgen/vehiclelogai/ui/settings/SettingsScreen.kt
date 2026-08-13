@@ -3,6 +3,8 @@ package com.schortgen.vehiclelogai.ui.settings
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.os.Build
+import android.provider.DocumentsContract
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContract
 import androidx.activity.result.contract.ActivityResultContracts
@@ -50,8 +52,11 @@ fun SettingsScreen(
     val completedPhotosFolderName by viewModel.completedPhotosFolderName.collectAsState()
     val isBackupInProgress by viewModel.isBackupInProgress.collectAsState()
     val backupStatusMessage by viewModel.backupStatusMessage.collectAsState()
+    val discoveredBackupFiles by viewModel.discoveredBackupFiles.collectAsState()
+    val isScanningBackups by viewModel.isScanningBackups.collectAsState()
 
     var pendingRestoreUri by remember { mutableStateOf<Uri?>(null) }
+    var showRestorePickerDialog by remember { mutableStateOf(false) }
 
     val folderPickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocumentTree()
@@ -360,14 +365,8 @@ fun SettingsScreen(
 
                             OutlinedButton(
                                 onClick = {
-                                    restoreLauncher.launch(
-                                        arrayOf(
-                                            "application/json",
-                                            "text/json",
-                                            "text/plain",
-                                            "application/octet-stream"
-                                        )
-                                    )
+                                    viewModel.scanForBackupFiles(context)
+                                    showRestorePickerDialog = true
                                 },
                                 modifier = Modifier.weight(1f)
                             ) {
@@ -515,6 +514,25 @@ fun SettingsScreen(
             }
         )
     }
+
+    // In-App Backup File Picker Dialog
+    if (showRestorePickerDialog) {
+        RestoreBackupPickerDialog(
+            backupFiles = discoveredBackupFiles,
+            isScanning = isScanningBackups,
+            onSelectFile = { uri ->
+                showRestorePickerDialog = false
+                pendingRestoreUri = uri
+            },
+            onSelectFolderUri = { folderUri ->
+                viewModel.scanFolderTreeUri(context, folderUri)
+            },
+            onBrowseSystemPicker = {
+                restoreLauncher.launch(arrayOf("application/json"))
+            },
+            onDismiss = { showRestorePickerDialog = false }
+        )
+    }
 }
 
 class OpenBackupDocumentContract : ActivityResultContract<Array<String>, Uri?>() {
@@ -526,6 +544,10 @@ class OpenBackupDocumentContract : ActivityResultContract<Array<String>, Uri?>()
             type = "application/json"
             if (input.isNotEmpty()) {
                 putExtra(Intent.EXTRA_MIME_TYPES, input)
+            }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                val downloadUri = Uri.parse("content://com.android.externalstorage.documents/document/primary%3ADownload")
+                putExtra(DocumentsContract.EXTRA_INITIAL_URI, downloadUri)
             }
         }
     }
