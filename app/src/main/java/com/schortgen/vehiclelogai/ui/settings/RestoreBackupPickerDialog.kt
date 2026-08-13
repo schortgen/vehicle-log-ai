@@ -55,6 +55,7 @@ fun RestoreBackupPickerDialog(
         contract = ActivityResultContracts.OpenDocumentTree()
     ) { uri ->
         if (uri != null) {
+            selectedTab = 0
             onSelectFolderUri(uri)
         }
     }
@@ -126,16 +127,25 @@ fun RestoreBackupPickerDialog(
                             )
                             Spacer(modifier = Modifier.height(12.dp))
                             Text(
-                                "No JSON backup files auto-detected.",
+                                "No JSON backup files auto-detected in standard storage.",
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
-                            Spacer(modifier = Modifier.height(8.dp))
+                            Spacer(modifier = Modifier.height(6.dp))
                             Text(
-                                "Switch to 'Browse Folders' or tap 'Pick Folder' below to find your backup file.",
+                                "You can pick a folder or browse all storage locations directly.",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
+                            Spacer(modifier = Modifier.height(16.dp))
+                            Button(
+                                onClick = onBrowseSystemPicker,
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Icon(Icons.Default.FolderOpen, contentDescription = null, modifier = Modifier.size(18.dp))
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("Browse Files with System Picker")
+                            }
                         }
                     } else {
                         val newestBackup = backupFiles.firstOrNull()

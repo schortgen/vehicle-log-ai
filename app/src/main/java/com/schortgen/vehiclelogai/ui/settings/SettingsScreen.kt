@@ -528,7 +528,17 @@ fun SettingsScreen(
                 viewModel.scanFolderTreeUri(context, folderUri)
             },
             onBrowseSystemPicker = {
-                restoreLauncher.launch(arrayOf("application/json"))
+                showRestorePickerDialog = false
+                restoreLauncher.launch(
+                    arrayOf(
+                        "application/json",
+                        "text/json",
+                        "text/plain",
+                        "application/octet-stream",
+                        "text/x-json",
+                        "*/*"
+                    )
+                )
             },
             onDismiss = { showRestorePickerDialog = false }
         )
@@ -539,12 +549,18 @@ class OpenBackupDocumentContract : ActivityResultContract<Array<String>, Uri?>()
     override fun createIntent(context: Context, input: Array<String>): Intent {
         return Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
             addCategory(Intent.CATEGORY_OPENABLE)
-            // Setting a specific non-media type ("application/json") instead of "*/*"
-            // instructs the system file picker to filter out and hide image/photo files completely
-            type = "application/json"
-            if (input.isNotEmpty()) {
-                putExtra(Intent.EXTRA_MIME_TYPES, input)
-            }
+            // Use */* with EXTRA_MIME_TYPES so all document providers, Download managers,
+            // and OEM file explorers show and enable .json files without graying them out
+            type = "*/*"
+            val mimeTypes = if (input.isNotEmpty()) input else arrayOf(
+                "application/json",
+                "text/json",
+                "text/plain",
+                "application/octet-stream",
+                "text/x-json",
+                "*/*"
+            )
+            putExtra(Intent.EXTRA_MIME_TYPES, mimeTypes)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 val downloadUri = Uri.parse("content://com.android.externalstorage.documents/document/primary%3ADownload")
                 putExtra(DocumentsContract.EXTRA_INITIAL_URI, downloadUri)
