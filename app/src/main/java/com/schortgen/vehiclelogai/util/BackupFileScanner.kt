@@ -157,14 +157,22 @@ object BackupFileScanner {
             }
         }
 
-        // 3. Scan Public Downloads & Documents directories directly
+        // 3. Scan Public Directories (DCIM, Pictures, Downloads, Documents)
+        runCatching {
+            val dcimDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DCIM)
+            scanDirectoryRecursively(dcimDir, foundItems, maxDepth = 3)
+        }
+        runCatching {
+            val picturesDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES)
+            scanDirectoryRecursively(picturesDir, foundItems, maxDepth = 3)
+        }
         runCatching {
             val downloadsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
-            scanDirectoryRecursively(downloadsDir, foundItems, maxDepth = 2)
+            scanDirectoryRecursively(downloadsDir, foundItems, maxDepth = 3)
         }
         runCatching {
             val documentsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOCUMENTS)
-            scanDirectoryRecursively(documentsDir, foundItems, maxDepth = 2)
+            scanDirectoryRecursively(documentsDir, foundItems, maxDepth = 3)
         }
 
         // 4. Scan App-specific directories
