@@ -11,20 +11,9 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material.icons.filled.Backup
-import androidx.compose.material.icons.filled.Download
-import androidx.compose.material.icons.filled.BugReport
-import androidx.compose.material.icons.filled.DriveFileMove
-import com.schortgen.vehiclelogai.navigation.Screen
-import androidx.compose.material.icons.filled.Folder
-import androidx.compose.material.icons.filled.FolderOpen
-import androidx.compose.material.icons.filled.Info
-import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.Upload
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -35,6 +24,7 @@ import androidx.compose.ui.unit.dp
 import androidx.documentfile.provider.DocumentFile
 import androidx.navigation.NavHostController
 import com.schortgen.vehiclelogai.data.repository.PreferredTripMeter
+import com.schortgen.vehiclelogai.ui.navigation.Screen
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -105,11 +95,13 @@ fun SettingsScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
-                .verticalScroll(rememberScrollState())
-                .padding(16.dp),
+                .padding(horizontal = 16.dp)
+                .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            // Processed Photos Destination Folder Card
+            Spacer(modifier = Modifier.height(4.dp))
+
+            // Preferred Trip Meter Card
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
@@ -124,12 +116,12 @@ fun SettingsScreen(
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         Icon(
-                            imageVector = Icons.Default.DriveFileMove,
-                            contentDescription = "Folder Move Icon",
+                            imageVector = Icons.Default.DirectionsCar,
+                            contentDescription = "Trip Meter Icon",
                             tint = MaterialTheme.colorScheme.primary
                         )
                         Text(
-                            text = "Processed Photos Move Destination",
+                            text = "Preferred Trip Meter",
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold
                         )
@@ -138,160 +130,210 @@ fun SettingsScreen(
                     Spacer(modifier = Modifier.height(8.dp))
 
                     Text(
-                        text = "Automatically move photos out of your Camera/DCIM folder after data has been extracted and a vehicle event is created.",
+                        text = "Select which trip meter reading to use when creating odometer events from photos that show both Trip A and Trip B.",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
 
-                    Spacer(modifier = Modifier.height(16.dp))
+                    Spacer(modifier = Modifier.height(12.dp))
 
+                    // Option: Trip A
                     Row(
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { viewModel.updatePreferredTripMeter(PreferredTripMeter.TRIP_A) }
+                            .padding(vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        RadioButton(
+                            selected = preferredTripMeter == PreferredTripMeter.TRIP_A,
+                            onClick = { viewModel.updatePreferredTripMeter(PreferredTripMeter.TRIP_A) }
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Column {
+                            Text(
+                                text = "Trip A",
+                                style = MaterialTheme.typography.bodyLarge,
+                                fontWeight = FontWeight.Medium
+                            )
+                            Text(
+                                text = "Use Trip A reading by default",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+
+                    // Option: Trip B
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { viewModel.updatePreferredTripMeter(PreferredTripMeter.TRIP_B) }
+                            .padding(vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        RadioButton(
+                            selected = preferredTripMeter == PreferredTripMeter.TRIP_B,
+                            onClick = { viewModel.updatePreferredTripMeter(PreferredTripMeter.TRIP_B) }
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Column {
+                            Text(
+                                text = "Trip B",
+                                style = MaterialTheme.typography.bodyLarge,
+                                fontWeight = FontWeight.Medium
+                            )
+                            Text(
+                                text = "Use Trip B reading by default",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+
+                    // Option: Odometer Only
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { viewModel.updatePreferredTripMeter(PreferredTripMeter.NONE) }
+                            .padding(vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        RadioButton(
+                            selected = preferredTripMeter == PreferredTripMeter.NONE,
+                            onClick = { viewModel.updatePreferredTripMeter(PreferredTripMeter.NONE) }
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Column {
+                            Text(
+                                text = "Total Odometer Only",
+                                style = MaterialTheme.typography.bodyLarge,
+                                fontWeight = FontWeight.Medium
+                            )
+                            Text(
+                                text = "Do not prioritize trip meters; use main odometer",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                }
+            }
+
+            // Photo Management Card
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp)
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Folder,
+                            contentDescription = "Photo Management Icon",
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                        Text(
+                            text = "Photo Management",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    Text(
+                        text = "Automatically move processed photos out of your main camera roll to a dedicated folder after review is complete.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    // Toggle Switch
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                val newState = !movePhotosOnComplete
+                                if (newState && completedPhotosFolderUri == null) {
+                                    folderPickerLauncher.launch(null)
+                                } else {
+                                    viewModel.updateMovePhotosOnComplete(newState)
+                                }
+                            }
+                            .padding(vertical = 4.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                text = "Move photos after event creation",
+                                text = "Move completed photos",
                                 style = MaterialTheme.typography.bodyLarge,
-                                fontWeight = FontWeight.SemiBold
+                                fontWeight = FontWeight.Medium
                             )
                             Text(
-                                text = if (movePhotosOnComplete) "Active" else "Disabled",
+                                text = if (movePhotosOnComplete) "Enabled" else "Disabled",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
                         Switch(
                             checked = movePhotosOnComplete,
-                            onCheckedChange = { viewModel.updateMovePhotosOnComplete(it) }
+                            onCheckedChange = { isChecked ->
+                                if (isChecked && completedPhotosFolderUri == null) {
+                                    folderPickerLauncher.launch(null)
+                                } else {
+                                    viewModel.updateMovePhotosOnComplete(isChecked)
+                                }
+                            }
                         )
                     }
 
+                    // Folder Selection (visible when enabled)
                     if (movePhotosOnComplete) {
-                        Spacer(modifier = Modifier.height(12.dp))
-                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
-                        Spacer(modifier = Modifier.height(12.dp))
-
-                        Text(
-                            text = "Current Folder Location:",
-                            style = MaterialTheme.typography.labelLarge,
-                            fontWeight = FontWeight.Bold
-                        )
-                        Text(
-                            text = completedPhotosFolderName ?: "Pictures/ProcessedVehiclePhotos",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.primary,
-                            fontWeight = FontWeight.Medium,
-                            modifier = Modifier.padding(vertical = 4.dp)
-                        )
-
-                        Spacer(modifier = Modifier.height(12.dp))
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Divider()
+                        Spacer(modifier = Modifier.height(8.dp))
 
                         Row(
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { folderPickerLauncher.launch(null) }
+                                .padding(vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
                         ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "Destination Folder",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.Medium
+                                )
+                                Text(
+                                    text = completedPhotosFolderName ?: "VehicleLogAI/Completed (Default)",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                            }
                             OutlinedButton(
-                                onClick = { folderPickerLauncher.launch(null) }
+                                onClick = { folderPickerLauncher.launch(null) },
+                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
                             ) {
-                                Icon(
-                                    imageVector = Icons.Default.FolderOpen,
-                                    contentDescription = "Choose Folder",
-                                    modifier = Modifier.size(18.dp)
-                                )
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text("Choose Folder")
-                            }
-
-                            if (!completedPhotosFolderUri.isNullOrBlank()) {
-                                OutlinedButton(
-                                    onClick = {
-                                        viewModel.setCompletedPhotosFolder(null, "Pictures/ProcessedVehiclePhotos")
-                                    }
-                                ) {
-                                    Text("Reset Default")
-                                }
+                                Text("Change")
                             }
                         }
                     }
                 }
             }
 
-            // Fuel Stop Trip Meter Selection Card
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-            ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp)
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Settings,
-                            contentDescription = "Trip Meter Icon",
-                            tint = MaterialTheme.colorScheme.primary
-                        )
-                        Text(
-                            text = "Fuel Stop Trip Meter Target",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.height(8.dp))
-
-                    Text(
-                        text = "Select which trip meter on your vehicle's dashboard is used to measure mileage between fuel fill-ups. Vehicle Log AI will prioritize this meter when reading dashboard photos.",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-
-                    Spacer(modifier = Modifier.height(16.dp))
-
-                    Column(modifier = Modifier.selectableGroup()) {
-                        PreferredTripMeter.values().forEach { meter ->
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clickable { viewModel.updatePreferredTripMeter(meter) }
-                                    .padding(vertical = 10.dp, horizontal = 4.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                RadioButton(
-                                    selected = (meter == preferredTripMeter),
-                                    onClick = { viewModel.updatePreferredTripMeter(meter) }
-                                )
-                                Spacer(modifier = Modifier.width(12.dp))
-                                Column {
-                                    Text(
-                                        text = meter.displayName,
-                                        style = MaterialTheme.typography.bodyLarge,
-                                        fontWeight = FontWeight.SemiBold
-                                    )
-                                    Text(
-                                        text = meter.description,
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                }
-                            }
-                            if (meter != PreferredTripMeter.values().last()) {
-                                HorizontalDivider(
-                                    modifier = Modifier.padding(start = 48.dp),
-                                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-
-            // Data Backup & Restore Card
+            // Backup & Restore Card
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
@@ -307,11 +349,11 @@ fun SettingsScreen(
                     ) {
                         Icon(
                             imageVector = Icons.Default.Backup,
-                            contentDescription = "Backup Icon",
+                            contentDescription = "Backup & Restore Icon",
                             tint = MaterialTheme.colorScheme.primary
                         )
                         Text(
-                            text = "Backup & Restore Data",
+                            text = "Backup & Restore",
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold
                         )
@@ -320,7 +362,7 @@ fun SettingsScreen(
                     Spacer(modifier = Modifier.height(8.dp))
 
                     Text(
-                        text = "Export your vehicle profiles, fuel log history, pending review items, scanned photos, and app preferences to a single backup JSON file, or restore data from an existing backup.",
+                        text = "Export your vehicles, log events, review queue, and scanned photo records to a single JSON backup file, or restore from a previous backup.",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -329,11 +371,9 @@ fun SettingsScreen(
 
                     if (isBackupInProgress) {
                         Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 12.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.Center
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.Center,
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
                             CircularProgressIndicator(modifier = Modifier.size(24.dp))
                             Spacer(modifier = Modifier.width(12.dp))
@@ -452,43 +492,50 @@ fun SettingsScreen(
                     ) {
                         Icon(
                             imageVector = Icons.Default.Info,
-                            contentDescription = "Usage Tip",
-                            tint = MaterialTheme.colorScheme.primary
+                            contentDescription = "Info Icon",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                         Text(
-                            text = "Trip Meter Recommendation",
+                            text = "About Trip Meters",
                             style = MaterialTheme.typography.titleSmall,
                             fontWeight = FontWeight.Bold
                         )
                     }
 
-                    Spacer(modifier = Modifier.height(8.dp))
+                    Spacer(modifier = Modifier.height(6.dp))
 
                     Text(
-                        text = "• Trip A: Reset every time you fill up at the gas station.\n• Trip B: Keep running to track mileage between oil changes or long road trips.",
+                        text = "• Trip A is commonly used for individual trips or fuel-fill intervals.\n" +
+                                "• Trip B is commonly used for oil-change or maintenance intervals.\n" +
+                                "• When both are detected in a dashboard photo, your preferred meter is selected automatically, but you can always switch it on the review screen.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
             }
+
+            Spacer(modifier = Modifier.height(16.dp))
         }
     }
 
-    // Confirmation Dialog before Restoring
+    // Confirmation dialog before executing restore
     pendingRestoreUri?.let { uri ->
         AlertDialog(
             onDismissRequest = { pendingRestoreUri = null },
-            title = { Text("Confirm Restore") },
+            title = { Text("Restore Backup?") },
             text = {
-                Text("Restoring data will replace existing vehicle profiles, fuel logs, and settings with the contents of the selected backup file.\n\nAre you sure you want to proceed?")
+                Text("Restoring will replace all existing vehicles, timeline events, and review queue items with the contents of this backup.\n\nAre you sure you want to proceed?")
             },
             confirmButton = {
                 Button(
                     onClick = {
-                        val restoreUri = uri
+                        val toRestore = uri
                         pendingRestoreUri = null
-                        viewModel.importBackup(context, restoreUri)
-                    }
+                        viewModel.importBackup(context, toRestore)
+                    },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.error
+                    )
                 ) {
                     Text("Restore")
                 }
@@ -501,11 +548,11 @@ fun SettingsScreen(
         )
     }
 
-    // Status / Result Dialog
+    // Result dialog showing backup/restore outcome
     backupStatusMessage?.let { message ->
         AlertDialog(
             onDismissRequest = { viewModel.clearStatusMessage() },
-            title = { Text("Backup & Restore Status") },
+            title = { Text("Backup Status") },
             text = { Text(message) },
             confirmButton = {
                 Button(onClick = { viewModel.clearStatusMessage() }) {
@@ -531,12 +578,12 @@ fun SettingsScreen(
                 showRestorePickerDialog = false
                 restoreLauncher.launch(
                     arrayOf(
+                        "*/*",
                         "application/json",
                         "text/json",
                         "text/plain",
                         "application/octet-stream",
-                        "text/x-json",
-                        "*/*"
+                        "text/x-json"
                     )
                 )
             },
@@ -550,21 +597,17 @@ class OpenBackupDocumentContract : ActivityResultContract<Array<String>, Uri?>()
         return Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
             addCategory(Intent.CATEGORY_OPENABLE)
             // Use */* with EXTRA_MIME_TYPES so all document providers, Download managers,
-            // and OEM file explorers show and enable .json files without graying them out
+            // DCIM folders, and OEM file explorers show and enable files without graying them out
             type = "*/*"
             val mimeTypes = if (input.isNotEmpty()) input else arrayOf(
+                "*/*",
                 "application/json",
                 "text/json",
                 "text/plain",
                 "application/octet-stream",
-                "text/x-json",
-                "*/*"
+                "text/x-json"
             )
             putExtra(Intent.EXTRA_MIME_TYPES, mimeTypes)
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                val downloadUri = Uri.parse("content://com.android.externalstorage.documents/document/primary%3ADownload")
-                putExtra(DocumentsContract.EXTRA_INITIAL_URI, downloadUri)
-            }
         }
     }
 
@@ -572,4 +615,3 @@ class OpenBackupDocumentContract : ActivityResultContract<Array<String>, Uri?>()
         return if (resultCode == android.app.Activity.RESULT_OK) intent?.data else null
     }
 }
-

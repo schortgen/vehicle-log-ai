@@ -52,8 +52,8 @@ object BackupFileScanner {
     }
 
     /**
-     * Auto-scans standard storage locations, MediaStore, Downloads, Documents,
-     * and storage volumes for all files without blocking or filtering out any files.
+     * Auto-scans standard storage locations, MediaStore, Downloads, Documents, DCIM,
+     * Pictures, and storage volumes for all files without blocking or filtering out any files.
      */
     fun scanDeviceForBackups(context: Context): List<BackupFileItem> {
         val foundItems = mutableMapOf<String, BackupFileItem>()
@@ -67,7 +67,6 @@ object BackupFileScanner {
                 MediaStore.Files.FileColumns.SIZE,
                 MediaStore.Files.FileColumns.DATE_MODIFIED
             )
-
             context.contentResolver.query(
                 externalUri,
                 projection,
@@ -79,9 +78,8 @@ object BackupFileScanner {
                 val nameCol = cursor.getColumnIndexOrThrow(MediaStore.Files.FileColumns.DISPLAY_NAME)
                 val sizeCol = cursor.getColumnIndexOrThrow(MediaStore.Files.FileColumns.SIZE)
                 val dateCol = cursor.getColumnIndexOrThrow(MediaStore.Files.FileColumns.DATE_MODIFIED)
-
                 var count = 0
-                while (cursor.moveToNext() && count < 200) {
+                while (cursor.moveToNext() && count < 500) {
                     val id = cursor.getLong(idCol)
                     val name = cursor.getString(nameCol) ?: "file_$id"
                     val size = cursor.getLong(sizeCol)
@@ -89,9 +87,8 @@ object BackupFileScanner {
                     val dateMs = dateSec * 1000L
                     val contentUri = ContentUris.withAppendedId(externalUri, id)
                     val isJson = name.endsWith(".json", ignoreCase = true)
-
                     val key = contentUri.toString()
-                    if (!foundItems.containsKey(key) && !foundItems.containsKey(name)) {
+                    if (!foundItems.containsKey(key)) {
                         foundItems[key] = BackupFileItem(
                             name = name,
                             uri = contentUri,
@@ -117,7 +114,6 @@ object BackupFileScanner {
                     MediaStore.Downloads.SIZE,
                     MediaStore.Downloads.DATE_MODIFIED
                 )
-
                 context.contentResolver.query(
                     MediaStore.Downloads.EXTERNAL_CONTENT_URI,
                     projection,
@@ -129,7 +125,6 @@ object BackupFileScanner {
                     val nameCol = cursor.getColumnIndexOrThrow(MediaStore.Downloads.DISPLAY_NAME)
                     val sizeCol = cursor.getColumnIndexOrThrow(MediaStore.Downloads.SIZE)
                     val dateCol = cursor.getColumnIndexOrThrow(MediaStore.Downloads.DATE_MODIFIED)
-
                     while (cursor.moveToNext()) {
                         val id = cursor.getLong(idCol)
                         val name = cursor.getString(nameCol) ?: "download_$id"
@@ -138,7 +133,6 @@ object BackupFileScanner {
                         val dateMs = dateSec * 1000L
                         val contentUri = ContentUris.withAppendedId(MediaStore.Downloads.EXTERNAL_CONTENT_URI, id)
                         val isJson = name.endsWith(".json", ignoreCase = true)
-
                         val key = contentUri.toString()
                         if (!foundItems.containsKey(key)) {
                             foundItems[key] = BackupFileItem(
@@ -157,38 +151,61 @@ object BackupFileScanner {
             }
         }
 
-        // 3. Scan Public Directories (DCIM, Pictures, Downloads, Documents)
-        runCatching {
-            val dcimDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DCIM)
-            scanDirectoryRecursively(dcimDir, foundItems, maxDepth = 3)
-        }
-        runCatching {
-            val picturesDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES)
-            scanDirectoryRecursively(picturesDir, foundItems, maxDepth = 3)
-        }
-        runCatching {
-            val downloadsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
-            scanDirectoryRecursively(downloadsDir, foundItems, maxDepth = 3)
-        }
-        runCatching {
-            val documentsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOCUMENTS)
-            scanDirectoryRecursively(documentsDir, foundItems, maxDepth = 3)
+        // 3. Scan Public Directories (DCIM, DCIM/Camera, Pictures, Downloads, Documents)
+        val standardDirs = listOf(
+            Environment.DIRECTORY_DCIM,
+            Environment.DIRECTORY_PICTURES,
+            Environment.DIRECTORY_DOWNLOADS,
+            Environment.DIRECTORY_DOCUMENTS,
+            Environment.DIRECTORY_MOVIES,
+            Environment.DIRECTORY_MUSIC
+        )
+
+        for (dirType in standardDirs) {
+            runCatching {
+                val dir = Environment.getExternalStoragePublicDirectory(dirType)
+                scanDirectoryRecursively(dir, foundItems, maxDepth = 4)
+            }
         }
 
-        // 4. Scan App-specific directories
-        runCatching {
-            context.getExternalFilesDir(null)?.let { scanDirectoryRecursively(it, foundItems, maxDepth = 2) }
-            context.filesDir?.let { scanDirectoryRecursively(it, foundItems, maxDepth = 2) }
+        // 4. Scan Common external storage mount points
+        val commonPaths = listOf(
+            "/sdcard/DCIM",
+            "/sdcard/DCIM/Camera",
+            "/sdcard/Download",
+            "/sdcard/Downloads",
+            "/sdcard/Documents",
+            "/sdcard/Pictures",
+            "/storage/emulated/0/DCIM",
+            "/storage/emulated/0/DCIM/Camera",
+            "/storage/emulated/0/Download",
+            "/storage/emulated/0/Downloads",
+            "/storage/emulated/0/Documents",
+            "/storage/emulated/0/Pictures"
+        )
+        for (path in commonPaths) {
+            runCatching {
+                val dir = File(path)
+                if (dir.exists() && dir.isDirectory) {
+                    scanDirectoryRecursively(dir, foundItems, maxDepth = 3)
+                }
+            }
         }
 
-        // 5. Scan Root External Storage
+        // 5. Scan App-specific directories
+        runCatching {
+            context.getExternalFilesDir(null)?.let { scanDirectoryRecursively(it, foundItems, maxDepth = 3) }
+            context.filesDir?.let { scanDirectoryRecursively(it, foundItems, maxDepth = 3) }
+        }
+
+        // 6. Scan Root External Storage
         runCatching {
             val externalDir = Environment.getExternalStorageDirectory()
             if (externalDir != null && externalDir.exists()) {
                 val topLevelFolders = externalDir.listFiles() ?: emptyArray()
                 for (folder in topLevelFolders) {
                     if (folder.isDirectory && !folder.name.startsWith(".") && !folder.name.equals("Android", ignoreCase = true)) {
-                        scanDirectoryRecursively(folder, foundItems, maxDepth = 1)
+                        scanDirectoryRecursively(folder, foundItems, maxDepth = 3)
                     } else if (folder.isFile) {
                         val item = BackupFileItem(
                             name = folder.name,
@@ -220,7 +237,7 @@ object BackupFileScanner {
     fun scanDocumentTree(context: Context, treeUri: Uri): List<BackupFileItem> {
         val rootDoc = DocumentFile.fromTreeUri(context, treeUri) ?: return emptyList()
         val results = mutableListOf<BackupFileItem>()
-        scanDocumentFileRecursively(rootDoc, results, maxDepth = 3)
+        scanDocumentFileRecursively(rootDoc, results, maxDepth = 5)
         return results.sortedWith(
             compareByDescending<BackupFileItem> { it.isJson }
                 .thenByDescending { it.dateModifiedMs }

@@ -63,6 +63,25 @@ fun RestoreBackupPickerDialog(
         }
     }
 
+    // Quick access shortcut directories
+    val shortcutDirs = remember {
+        val list = mutableListOf<File>()
+        listOf(
+            Environment.DIRECTORY_DCIM,
+            Environment.DIRECTORY_PICTURES,
+            Environment.DIRECTORY_DOWNLOADS,
+            Environment.DIRECTORY_DOCUMENTS
+        ).forEach { dirType ->
+            runCatching {
+                val d = Environment.getExternalStoragePublicDirectory(dirType)
+                if (d != null && d.exists()) list.add(d)
+            }
+        }
+        val dcimCamera = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DCIM), "Camera")
+        if (dcimCamera.exists()) list.add(dcimCamera)
+        list
+    }
+
     val folderContents = remember(currentFolder) {
         val files = currentFolder.listFiles() ?: emptyArray()
         val nodes = mutableListOf<FolderNode>()
@@ -114,7 +133,7 @@ fun RestoreBackupPickerDialog(
         Card(
             modifier = Modifier
                 .fillMaxWidth(0.95f)
-                .fillMaxHeight(0.85f)
+                .fillMaxHeight(0.88f)
                 .padding(16.dp),
             shape = RoundedCornerShape(16.dp),
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
@@ -149,7 +168,34 @@ fun RestoreBackupPickerDialog(
 
                 Spacer(modifier = Modifier.height(12.dp))
 
-                // Tabs: All Files vs Browse Folders
+                // Fast Action Buttons at the Top for Instant Access
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    FilledTonalButton(
+                        onClick = onBrowseSystemPicker,
+                        modifier = Modifier.weight(1f),
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp)
+                    ) {
+                        Icon(Icons.Default.FileOpen, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("System Picker (All)", maxLines = 1, style = MaterialTheme.typography.labelMedium)
+                    }
+                    FilledTonalButton(
+                        onClick = { folderPickerLauncher.launch(null) },
+                        modifier = Modifier.weight(1f),
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp)
+                    ) {
+                        Icon(Icons.Default.FolderOpen, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Pick Folder (SAF)", maxLines = 1, style = MaterialTheme.typography.labelMedium)
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // Tabs: Detected Files vs Browse Folders
                 TabRow(selectedTabIndex = selectedTab) {
                     Tab(
                         selected = selectedTab == 0,
@@ -183,7 +229,7 @@ fun RestoreBackupPickerDialog(
                     )
                 }
 
-                Spacer(modifier = Modifier.height(12.dp))
+                Spacer(modifier = Modifier.height(10.dp))
 
                 // Tab 0: Detected Files
                 if (selectedTab == 0) {
@@ -246,7 +292,7 @@ fun RestoreBackupPickerDialog(
                                 )
                                 Spacer(modifier = Modifier.height(4.dp))
                                 Text(
-                                    "Use 'Pick Folder' or 'System Picker' below to select your file directly.",
+                                    "Tap 'System Picker' or 'Pick Folder' above to choose your file or folder directly.",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
@@ -268,6 +314,36 @@ fun RestoreBackupPickerDialog(
                 } else {
                     // Tab 1: Folder Browser
                     Column(modifier = Modifier.weight(1f)) {
+                        // Quick Folder Jump Chips (DCIM, Pictures, Download, Documents)
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            shortcutDirs.forEach { dir ->
+                                val isSelected = currentFolder == dir
+                                FilterChip(
+                                    selected = isSelected,
+                                    onClick = { currentFolder = dir },
+                                    label = {
+                                        Text(
+                                            text = dir.name,
+                                            style = MaterialTheme.typography.labelSmall,
+                                            maxLines = 1
+                                        )
+                                    },
+                                    leadingIcon = {
+                                        Icon(
+                                            Icons.Default.Folder,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(14.dp)
+                                        )
+                                    }
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(6.dp))
+
                         // Current Path & Up navigation
                         Row(
                             modifier = Modifier
@@ -312,11 +388,20 @@ fun RestoreBackupPickerDialog(
                                     .weight(1f),
                                 contentAlignment = Alignment.Center
                             ) {
-                                Text(
-                                    "No files or folders accessible here.",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
+                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                    Text(
+                                        "No files accessible via direct folder path.",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    Button(
+                                        onClick = { folderPickerLauncher.launch(null) },
+                                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                                    ) {
+                                        Text("Grant Access with 'Pick Folder'")
+                                    }
+                                }
                             }
                         } else {
                             LazyColumn(
@@ -377,33 +462,6 @@ fun RestoreBackupPickerDialog(
                                 }
                             }
                         }
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(12.dp))
-
-                // Bottom Action Buttons
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    OutlinedButton(
-                        onClick = onBrowseSystemPicker,
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        Icon(Icons.Default.FileOpen, contentDescription = null, modifier = Modifier.size(16.dp))
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text("System Picker", maxLines = 1)
-                    }
-
-                    Button(
-                        onClick = { folderPickerLauncher.launch(null) },
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        Icon(Icons.Default.FolderOpen, contentDescription = null, modifier = Modifier.size(16.dp))
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text("Pick Folder", maxLines = 1)
                     }
                 }
             }
