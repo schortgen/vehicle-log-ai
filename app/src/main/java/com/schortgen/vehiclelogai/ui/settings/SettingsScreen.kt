@@ -52,8 +52,11 @@ fun SettingsScreen(
     val completedPhotosFolderName by viewModel.completedPhotosFolderName.collectAsState()
     val isBackupInProgress by viewModel.isBackupInProgress.collectAsState()
     val backupStatusMessage by viewModel.backupStatusMessage.collectAsState()
+    val discoveredBackupFiles by viewModel.discoveredBackupFiles.collectAsState()
+    val isScanningBackups by viewModel.isScanningBackups.collectAsState()
 
     var pendingRestoreUri by remember { mutableStateOf<Uri?>(null) }
+    var showRestorePickerDialog by remember { mutableStateOf(false) }
 
     val folderPickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocumentTree()
@@ -362,16 +365,8 @@ fun SettingsScreen(
 
                             OutlinedButton(
                                 onClick = {
-                                    restoreLauncher.launch(
-                                        arrayOf(
-                                            "application/json",
-                                            "text/json",
-                                            "text/plain",
-                                            "application/octet-stream",
-                                            "text/x-json",
-                                            "*/*"
-                                        )
-                                    )
+                                    viewModel.scanForBackupFiles(context)
+                                    showRestorePickerDialog = true
                                 },
                                 modifier = Modifier.weight(1f)
                             ) {
@@ -517,6 +512,35 @@ fun SettingsScreen(
                     Text("OK")
                 }
             }
+        )
+    }
+
+    // In-App Backup File Picker Dialog
+    if (showRestorePickerDialog) {
+        RestoreBackupPickerDialog(
+            backupFiles = discoveredBackupFiles,
+            isScanning = isScanningBackups,
+            onSelectFile = { uri ->
+                showRestorePickerDialog = false
+                pendingRestoreUri = uri
+            },
+            onSelectFolderUri = { folderUri ->
+                viewModel.scanFolderTreeUri(context, folderUri)
+            },
+            onBrowseSystemPicker = {
+                showRestorePickerDialog = false
+                restoreLauncher.launch(
+                    arrayOf(
+                        "application/json",
+                        "text/json",
+                        "text/plain",
+                        "application/octet-stream",
+                        "text/x-json",
+                        "*/*"
+                    )
+                )
+            },
+            onDismiss = { showRestorePickerDialog = false }
         )
     }
 }
