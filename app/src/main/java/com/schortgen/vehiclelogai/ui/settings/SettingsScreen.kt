@@ -24,7 +24,7 @@ import androidx.compose.ui.unit.dp
 import androidx.documentfile.provider.DocumentFile
 import androidx.navigation.NavHostController
 import com.schortgen.vehiclelogai.data.repository.PreferredTripMeter
-import com.schortgen.vehiclelogai.ui.navigation.Screen
+import com.schortgen.vehiclelogai.navigation.Screen
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -191,27 +191,27 @@ fun SettingsScreen(
                         }
                     }
 
-                    // Option: Odometer Only
+                    // Option: Calculate / Odometer
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clickable { viewModel.updatePreferredTripMeter(PreferredTripMeter.NONE) }
+                            .clickable { viewModel.updatePreferredTripMeter(PreferredTripMeter.ANY) }
                             .padding(vertical = 4.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         RadioButton(
-                            selected = preferredTripMeter == PreferredTripMeter.NONE,
-                            onClick = { viewModel.updatePreferredTripMeter(PreferredTripMeter.NONE) }
+                            selected = preferredTripMeter == PreferredTripMeter.ANY,
+                            onClick = { viewModel.updatePreferredTripMeter(PreferredTripMeter.ANY) }
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Column {
                             Text(
-                                text = "Total Odometer Only",
+                                text = "Calculate / Total Odometer",
                                 style = MaterialTheme.typography.bodyLarge,
                                 fontWeight = FontWeight.Medium
                             )
                             Text(
-                                text = "Do not prioritize trip meters; use main odometer",
+                                text = "Calculate based on vehicle odometer reading",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
