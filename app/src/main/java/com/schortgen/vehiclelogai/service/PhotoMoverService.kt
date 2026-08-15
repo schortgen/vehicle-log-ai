@@ -319,7 +319,7 @@ class PhotoMoverService(
                 item.photoPath?.let { p -> if (p.isNotBlank()) dbPhotoPaths.add(p) }
             }
             allScannedPhotos.forEach { photo ->
-                photo.photoUri?.let { u -> if (u.isNotBlank()) dbPhotoPaths.add(u) }
+                if (photo.uri.isNotBlank()) dbPhotoPaths.add(photo.uri)
             }
 
             // 3. Gather all files from current source folder
@@ -450,12 +450,12 @@ class PhotoMoverService(
             // 6. Update all ScannedPhoto records in DB
             val updatedScannedPhotos = mutableListOf<ScannedPhoto>()
             for (scanned in allScannedPhotos) {
-                val rawUri = scanned.photoUri
-                if (!rawUri.isNullOrBlank()) {
+                val rawUri = scanned.uri
+                if (rawUri.isNotBlank()) {
                     val newU = pathMap[rawUri]
                         ?: pathMap.entries.firstOrNull { extractFileName(it.key) == extractFileName(rawUri) }?.value
                     if (newU != null && newU != rawUri) {
-                        updatedScannedPhotos.add(scanned.copy(photoUri = newU))
+                        updatedScannedPhotos.add(scanned.copy(uri = newU))
                     }
                 }
             }
