@@ -21,6 +21,7 @@ import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.schortgen.vehiclelogai.VehicleLogAIApplication
 import com.schortgen.vehiclelogai.data.models.EventType
+import com.schortgen.vehiclelogai.data.models.ReviewItem
 import com.schortgen.vehiclelogai.data.models.Vehicle
 import com.schortgen.vehiclelogai.data.models.calculateMpg
 import com.schortgen.vehiclelogai.data.models.displayName
@@ -165,6 +166,7 @@ fun VehicleDetailScreen(
                         TimelineCard(
                             event = event,
                             allEvents = sortedEvents,
+                            reviewItems = reviewItems,
                             dateFormat = dateFormat,
                             onClick = {
                                 navController.navigate(Screen.EventDetail.createRoute(event.id))
@@ -186,6 +188,7 @@ fun VehicleDetailScreen(
 private fun TimelineCard(
     event: com.schortgen.vehiclelogai.data.models.Event,
     allEvents: List<com.schortgen.vehiclelogai.data.models.Event> = emptyList(),
+    reviewItems: List<ReviewItem> = emptyList(),
     dateFormat: SimpleDateFormat,
     onClick: () -> Unit
 ) {

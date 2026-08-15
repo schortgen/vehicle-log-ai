@@ -11,6 +11,7 @@ import com.schortgen.vehiclelogai.data.models.FuelPurchaseCandidate
 import com.schortgen.vehiclelogai.data.models.ProcessingStatus
 import com.schortgen.vehiclelogai.data.models.ReviewItem
 import com.schortgen.vehiclelogai.data.models.Vehicle
+import com.schortgen.vehiclelogai.data.models.getPhotoPaths
 import com.schortgen.vehiclelogai.data.repository.EventRepository
 import com.schortgen.vehiclelogai.data.repository.PreferredTripMeter
 import com.schortgen.vehiclelogai.data.repository.PhotoScannerRepository
