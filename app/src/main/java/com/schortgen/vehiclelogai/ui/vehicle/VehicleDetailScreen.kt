@@ -19,6 +19,7 @@ import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
+import com.schortgen.vehiclelogai.VehicleLogAIApplication
 import com.schortgen.vehiclelogai.data.models.EventType
 import com.schortgen.vehiclelogai.data.models.Vehicle
 import com.schortgen.vehiclelogai.data.models.calculateMpg
@@ -48,6 +49,12 @@ fun VehicleDetailScreen(
     val sortedEvents = remember(events) {
         events.sortedWith(compareByDescending<com.schortgen.vehiclelogai.data.models.Event> { it.eventDate }.thenByDescending { it.id })
     }
+
+    val context = LocalContext.current
+    val app = context.applicationContext as? VehicleLogAIApplication
+    val reviewItems by remember(app) {
+        app?.reviewItemRepository?.observeAllReviewItems() ?: kotlinx.coroutines.flow.flowOf(emptyList())
+    }.collectAsState(initial = emptyList())
 
     val dateFormat = remember { SimpleDateFormat("MMM dd, yyyy HH:mm", Locale.getDefault()) }
 
@@ -304,7 +311,21 @@ private fun TimelineCard(
                     }
                 }
 
-                val photoPaths = remember(event.photoPath) { event.getPhotoPaths() }
+                val photoPaths = remember(event.photoPath, reviewItems) {
+                    val list = mutableListOf<String>()
+                    reviewItems.filter { it.eventId == event.id }.forEach { item ->
+                        val path = item.photoPath
+                        if (!path.isNullOrBlank() && !list.contains(path)) {
+                            list.add(path)
+                        }
+                    }
+                    event.getPhotoPaths().forEach { sp ->
+                        if (sp.isNotBlank() && !list.contains(sp)) {
+                            list.add(sp)
+                        }
+                    }
+                    list
+                }
                 if (photoPaths.isNotEmpty()) {
                     Spacer(modifier = Modifier.height(8.dp))
                     Row(

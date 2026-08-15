@@ -515,19 +515,15 @@ class ReviewQueueViewModel(
         return if (conf1 >= conf2) val1 else val2
     }
 
-    fun saveAsFuelEvent(
-        reviewItemId: Long,
+    fun saveGroupItemsAsFuelEvent(
+        targetEventId: Long?,
+        groupItems: List<ReviewItem>,
         vehicleId: Long,
         editedCandidate: FuelPurchaseCandidate
     ) {
         _saveErrors.value = null
         viewModelScope.launch {
             try {
-                val item = reviewItemRepository.getReviewItemById(reviewItemId) ?: run {
-                    _saveErrors.value = "Review item not found"
-                    return@launch
-                }
-
                 val vehicle = vehicleRepository?.getVehicleById(vehicleId) ?: run {
                     _saveErrors.value = "Please select a vehicle"
                     return@launch
@@ -556,89 +552,51 @@ class ReviewQueueViewModel(
                     return@launch
                 }
 
-                val moveResult = photoMoverService?.movePhotoIfEnabled(item.photoPath)
-                val movedPhotoPath = moveResult?.newPath ?: item.photoPath
+                // Check if an existing event exists
+                val resolvedEventId = targetEventId?.takeIf { it > 0L }
+                    ?: groupItems.firstOrNull { it.eventId != null && it.eventId!! > 0L }?.eventId
+                val existingEvent = resolvedEventId?.let { eventRepository?.getEventById(it) }
 
-                if (moveResult?.pendingDeleteUri != null) {
-                    val intentSender = photoMoverService?.createDeleteRequestIntentSender(listOf(moveResult.pendingDeleteUri))
-                    if (intentSender != null) {
-                        _pendingDeleteIntentSender.value = intentSender
+                // Gather all items in this group
+                val dbItemsForEvent = if (resolvedEventId != null) {
+                    try {
+                        reviewItemRepository.getAllReviewItems().filter { it.eventId == resolvedEventId }
+                    } catch (e: Exception) {
+                        emptyList()
+                    }
+                } else emptyList()
+
+                val combinedItemsMap = (groupItems + dbItemsForEvent).associateBy { it.id }.toMutableMap()
+
+                val pendingUris = mutableListOf<Uri>()
+
+                // Move and update all individual review item photo paths
+                val updatedReviewItems = combinedItemsMap.values.map { item ->
+                    val rawPath = item.photoPath
+                    if (!rawPath.isNullOrBlank()) {
+                        val moveResult = photoMoverService?.movePhotoIfEnabled(rawPath)
+                        val movedPath = moveResult?.newPath ?: rawPath
+                        moveResult?.pendingDeleteUri?.let { pendingUris.add(it) }
+                        item.copy(status = ProcessingStatus.COMPLETE, vehicleId = vehicleId, photoPath = movedPath)
+                    } else {
+                        item.copy(status = ProcessingStatus.COMPLETE, vehicleId = vehicleId)
                     }
                 }
 
-                val itemWithPhoto = item.copy(photoPath = movedPhotoPath)
-                val event = CandidateMapper.toEvent(editedCandidate, vehicleId, itemWithPhoto)
+                // Collect all photo paths: from updated review items, plus any in existingEvent.photoPath
+                val allMovedPhotoPaths = mutableListOf<String>()
+                updatedReviewItems.forEach { it.photoPath?.let { p -> if (p.isNotBlank() && !allMovedPhotoPaths.contains(p)) allMovedPhotoPaths.add(p) } }
 
-                val insertedId = eventRepository?.insertEvent(event) ?: run {
-                    _saveErrors.value = "Database error: Event repository not available"
-                    return@launch
-                }
-
-                if (editedCandidate.odometer != null && editedCandidate.odometer > (vehicle.currentMileage ?: 0)) {
-                    vehicleRepository?.updateVehicle(vehicle.copy(currentMileage = editedCandidate.odometer))
-                }
-
-                reviewItemRepository.updateReviewItem(
-                    itemWithPhoto.copy(status = ProcessingStatus.COMPLETE, vehicleId = vehicleId, eventId = insertedId)
-                )
-            } catch (e: Exception) {
-                _saveErrors.value = "Error saving fuel event: ${e.message}"
-            }
-        }
-    }
-
-    fun saveGroupedAsFuelEvent(
-        eventId: Long,
-        vehicleId: Long,
-        editedCandidate: FuelPurchaseCandidate
-    ) {
-        _saveErrors.value = null
-        viewModelScope.launch {
-            try {
-                val vehicle = vehicleRepository?.getVehicleById(vehicleId) ?: run {
-                    _saveErrors.value = "Please select a vehicle"
-                    return@launch
-                }
-
-                val existingEvent = eventRepository?.getEventById(eventId) ?: run {
-                    _saveErrors.value = "Event not found"
-                    return@launch
-                }
-
-                val missingFields = mutableListOf<String>()
-                if (editedCandidate.gallons == null) missingFields.add("Gallons")
-                if (editedCandidate.totalCost == null) missingFields.add("Total Cost")
-                if (editedCandidate.odometer == null) missingFields.add("Odometer")
-
-                if (missingFields.isNotEmpty()) {
-                    _saveErrors.value = "Required fields missing: ${missingFields.joinToString(", ")}"
-                    return@launch
-                }
-
-                val newDate = CandidateMapper.parseDate(editedCandidate.purchaseDate) ?: existingEvent.eventDate
-
-                val pendingUris = mutableListOf<Uri>()
-                // Update all associated review items status to COMPLETE and move photos
-                val associatedItems = reviewItems.value.filter { it.eventId == eventId }
-                val updatedItems = associatedItems.map { item ->
-                    val moveResult = photoMoverService?.movePhotoIfEnabled(item.photoPath)
-                    val movedPath = moveResult?.newPath ?: item.photoPath
-                    moveResult?.pendingDeleteUri?.let { pendingUris.add(it) }
-                    item.copy(status = ProcessingStatus.COMPLETE, vehicleId = vehicleId, photoPath = movedPath)
-                }
-                reviewItemRepository.updateAllReviewItems(updatedItems)
-
-                // Combine all moved photo paths for the event
-                val allMovedPhotos = updatedItems.mapNotNull { it.photoPath }.filter { it.isNotBlank() }.distinct()
-                val combinedPhotoPath = if (allMovedPhotos.isNotEmpty()) {
-                    allMovedPhotos.joinToString(",")
-                } else {
-                    val repPhoto = existingEvent.photoPath
-                    if (!repPhoto.isNullOrBlank()) {
-                        val repResult = photoMoverService?.movePhotoIfEnabled(repPhoto)
-                        repResult?.pendingDeleteUri?.let { pendingUris.add(it) }
-                        repResult?.newPath ?: repPhoto
-                    } else null
+                // Also check existingEvent's photoPath (split and move any additional photos not captured in review items)
+                existingEvent?.getPhotoPaths()?.forEach { path ->
+                    if (path.isNotBlank() && !allMovedPhotoPaths.contains(path)) {
+                        val moveResult = photoMoverService?.movePhotoIfEnabled(path)
+                        val movedPath = moveResult?.newPath ?: path
+                        moveResult?.pendingDeleteUri?.let { pendingUris.add(it) }
+                        if (!allMovedPhotoPaths.contains(movedPath)) {
+                            allMovedPhotoPaths.add(movedPath)
+                        }
+                    }
                 }
 
                 if (pendingUris.isNotEmpty()) {
@@ -648,29 +606,97 @@ class ReviewQueueViewModel(
                     }
                 }
 
-                val updatedEvent = existingEvent.copy(
-                    vehicleId = vehicleId,
-                    eventDate = newDate,
-                    verified = true,
-                    gallons = editedCandidate.gallons,
-                    totalCost = editedCandidate.totalCost,
-                    odometer = editedCandidate.odometer,
-                    tripDistance = editedCandidate.tripDistance,
-                    pricePerGallon = editedCandidate.pricePerGallon,
-                    location = editedCandidate.stationName,
-                    photoPath = combinedPhotoPath
-                )
+                val combinedPhotoPath = if (allMovedPhotoPaths.isNotEmpty()) allMovedPhotoPaths.joinToString(",") else null
+                val primaryItem = updatedReviewItems.firstOrNull() ?: groupItems.firstOrNull()
+                val eventDate = CandidateMapper.parseDate(editedCandidate.purchaseDate)
+                    ?: existingEvent?.eventDate
+                    ?: primaryItem?.captureDate
+                    ?: System.currentTimeMillis()
 
-                eventRepository?.updateEvent(updatedEvent)
+                val savedEventId: Long
+                if (existingEvent != null) {
+                    val updatedEvent = existingEvent.copy(
+                        vehicleId = vehicleId,
+                        eventDate = eventDate,
+                        verified = true,
+                        gallons = editedCandidate.gallons,
+                        totalCost = editedCandidate.totalCost,
+                        odometer = editedCandidate.odometer,
+                        tripDistance = editedCandidate.tripDistance,
+                        pricePerGallon = editedCandidate.pricePerGallon,
+                        location = editedCandidate.stationName,
+                        photoPath = combinedPhotoPath
+                    )
+                    eventRepository?.updateEvent(updatedEvent)
+                    savedEventId = existingEvent.id
+                } else {
+                    val newEvent = Event(
+                        vehicleId = vehicleId,
+                        eventType = EventType.FUEL,
+                        eventDate = eventDate,
+                        confidence = editedCandidate.overallConfidence.takeIf { it > 0f },
+                        verified = true,
+                        notes = primaryItem?.let { CandidateMapper.toEvent(editedCandidate, vehicleId, it).notes },
+                        odometer = editedCandidate.odometer,
+                        tripDistance = editedCandidate.tripDistance,
+                        gallons = editedCandidate.gallons,
+                        pricePerGallon = editedCandidate.pricePerGallon,
+                        totalCost = editedCandidate.totalCost,
+                        location = editedCandidate.stationName,
+                        photoPath = combinedPhotoPath
+                    )
+                    savedEventId = eventRepository?.insertEvent(newEvent) ?: run {
+                        _saveErrors.value = "Database error: Event repository not available"
+                        return@launch
+                    }
+                }
 
                 if (editedCandidate.odometer != null && editedCandidate.odometer > (vehicle.currentMileage ?: 0)) {
                     vehicleRepository?.updateVehicle(vehicle.copy(currentMileage = editedCandidate.odometer))
                 }
 
+                // Update all associated review items with final eventId and status
+                val finalItems = updatedReviewItems.map { it.copy(eventId = savedEventId) }
+                if (finalItems.isNotEmpty()) {
+                    reviewItemRepository.updateAllReviewItems(finalItems)
+                }
+
             } catch (e: Exception) {
-                _saveErrors.value = "Error saving grouped event: ${e.message}"
+                DiagnosticLogger.e("ReviewQueueVM", "Error saving fuel event", e)
+                _saveErrors.value = "Error saving fuel event: ${e.message}"
             }
         }
+    }
+
+    fun saveAsFuelEvent(
+        reviewItemId: Long,
+        vehicleId: Long,
+        editedCandidate: FuelPurchaseCandidate
+    ) {
+        viewModelScope.launch {
+            val item = reviewItemRepository.getReviewItemById(reviewItemId)
+            val items = if (item != null) listOf(item) else emptyList()
+            saveGroupItemsAsFuelEvent(
+                targetEventId = item?.eventId,
+                groupItems = items,
+                vehicleId = vehicleId,
+                editedCandidate = editedCandidate
+            )
+        }
+    }
+
+    fun saveGroupedAsFuelEvent(
+        eventId: Long,
+        vehicleId: Long,
+        editedCandidate: FuelPurchaseCandidate
+    ) {
+        val associated = reviewItems.value.filter { it.eventId == eventId }
+        saveGroupItemsAsFuelEvent(
+            targetEventId = eventId,
+            groupItems = associated,
+            vehicleId = vehicleId,
+            editedCandidate = editedCandidate
+        )
     }
 
     fun processOcr(reviewItemId: Long) {

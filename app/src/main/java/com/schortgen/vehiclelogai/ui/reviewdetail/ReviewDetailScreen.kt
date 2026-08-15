@@ -810,11 +810,16 @@ fun ReviewDetailScreen(
                                 if (isOdometerEdited) DiagnosticLogger.i("AILearning", "User edited odometer: AI detected='${parsedCandidate?.odometer}' -> User edited='$odometer'")
                                 if (isTripDistanceEdited) DiagnosticLogger.i("AILearning", "User edited tripDistance: AI detected='${parsedCandidate?.tripDistance}' -> User edited='$tripDistance'")
 
-                                if (targetEventId != null && targetEventId > 0L) {
-                                    reviewQueueViewModel.saveGroupedAsFuelEvent(targetEventId, vehId, candidate)
-                                } else {
-                                    reviewQueueViewModel.saveAsFuelEvent(activeItem.id, vehId, candidate)
-                                }
+                                val currentTargetEventId = targetEventId?.takeIf { it > 0L }
+                                    ?: activeItem.eventId?.takeIf { it > 0L }
+                                    ?: groupItems.firstOrNull { it.eventId != null && it.eventId!! > 0L }?.eventId
+
+                                reviewQueueViewModel.saveGroupItemsAsFuelEvent(
+                                    targetEventId = currentTargetEventId,
+                                    groupItems = if (groupItems.isNotEmpty()) groupItems else listOf(activeItem),
+                                    vehicleId = vehId,
+                                    editedCandidate = candidate
+                                )
                                 navController.navigateUp()
                             }
                         },

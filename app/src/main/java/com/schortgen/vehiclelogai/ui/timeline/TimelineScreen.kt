@@ -24,8 +24,10 @@ import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
+import com.schortgen.vehiclelogai.VehicleLogAIApplication
 import com.schortgen.vehiclelogai.data.models.Event
 import com.schortgen.vehiclelogai.data.models.EventType
+import com.schortgen.vehiclelogai.data.models.ReviewItem
 import com.schortgen.vehiclelogai.data.models.calculateMpg
 import com.schortgen.vehiclelogai.data.models.getPhotoPaths
 import com.schortgen.vehiclelogai.navigation.Screen
@@ -44,6 +46,12 @@ fun TimelineScreen(
 ) {
     val events by eventViewModel.observeAllEvents().collectAsState(initial = emptyList())
     val vehicles by vehicleViewModel.vehicles.collectAsState()
+
+    val context = LocalContext.current
+    val app = context.applicationContext as? VehicleLogAIApplication
+    val reviewItems by remember(app) {
+        app?.reviewItemRepository?.observeAllReviewItems() ?: kotlinx.coroutines.flow.flowOf(emptyList())
+    }.collectAsState(initial = emptyList())
 
     var searchQuery by remember { mutableStateOf("") }
     var selectedVehicleId by remember { mutableStateOf<Long?>(null) } // null = All
@@ -221,6 +229,7 @@ fun TimelineScreen(
                         TimelineEventCard(
                             event = event,
                             allEvents = events,
+                            reviewItems = reviewItems,
                             vehicleName = vehicleName,
                             dateFormat = dateFormat,
                             onClick = {
@@ -238,6 +247,7 @@ fun TimelineScreen(
 private fun TimelineEventCard(
     event: Event,
     allEvents: List<Event> = emptyList(),
+    reviewItems: List<ReviewItem> = emptyList(),
     vehicleName: String?,
     dateFormat: SimpleDateFormat,
     onClick: () -> Unit
@@ -367,7 +377,21 @@ private fun TimelineEventCard(
                     }
                 }
 
-                val photoPaths = remember(event.photoPath) { event.getPhotoPaths() }
+                val photoPaths = remember(event.photoPath, reviewItems) {
+                    val list = mutableListOf<String>()
+                    reviewItems.filter { it.eventId == event.id }.forEach { item ->
+                        val path = item.photoPath
+                        if (!path.isNullOrBlank() && !list.contains(path)) {
+                            list.add(path)
+                        }
+                    }
+                    event.getPhotoPaths().forEach { sp ->
+                        if (sp.isNotBlank() && !list.contains(sp)) {
+                            list.add(sp)
+                        }
+                    }
+                    list
+                }
                 if (photoPaths.isNotEmpty()) {
                     Spacer(modifier = Modifier.height(8.dp))
                     Row(

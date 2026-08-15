@@ -15,6 +15,7 @@ import com.schortgen.vehiclelogai.data.models.Event
 import com.schortgen.vehiclelogai.data.models.EventType
 import com.schortgen.vehiclelogai.data.models.ProcessingStatus
 import com.schortgen.vehiclelogai.data.models.ReviewItem
+import com.schortgen.vehiclelogai.data.models.getPhotoPaths
 import com.schortgen.vehiclelogai.navigation.Screen
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -272,9 +273,10 @@ private fun GroupedEventCard(
                 shape = MaterialTheme.shapes.medium,
                 color = MaterialTheme.colorScheme.surfaceVariant
             ) {
-                if (event.photoPath != null) {
+                val repPhoto = event.getPhotoPaths().firstOrNull() ?: items.firstOrNull()?.photoPath
+                if (repPhoto != null) {
                     AsyncImage(
-                        model = event.photoPath,
+                        model = repPhoto,
                         contentDescription = "Event Thumbnail",
                         placeholder = painterResource(id = android.R.drawable.ic_menu_report_image),
                         error = painterResource(id = android.R.drawable.ic_dialog_alert),
