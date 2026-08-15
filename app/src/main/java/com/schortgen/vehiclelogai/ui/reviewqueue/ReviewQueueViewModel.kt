@@ -320,7 +320,7 @@ class ReviewQueueViewModel(
                     }
 
                     if (existingEv != null && existingPaths.isNotEmpty()) {
-                        eventRepository.updateEvent(existingEv.copy(photoPath = existingPaths.joinToString(",")))
+                        eventRepository?.updateEvent(existingEv.copy(photoPath = existingPaths.joinToString(",")))
                     }
                 }
             } catch (e: Exception) {
@@ -342,7 +342,7 @@ class ReviewQueueViewModel(
                         }
                     }
                     if (existingPaths.isNotEmpty()) {
-                        eventRepository.updateEvent(existingEv.copy(photoPath = existingPaths.joinToString(",")))
+                        eventRepository?.updateEvent(existingEv.copy(photoPath = existingPaths.joinToString(",")))
                     }
                 }
                 processOcr(item.id)
@@ -383,7 +383,7 @@ class ReviewQueueViewModel(
                             }
                         }
                         if (existingPaths.isNotEmpty()) {
-                            eventRepository.updateEvent(existingEv.copy(photoPath = existingPaths.joinToString(",")))
+                            eventRepository?.updateEvent(existingEv.copy(photoPath = existingPaths.joinToString(",")))
                         }
                     }
                     processOcr(itemToGroup.id)
@@ -437,7 +437,7 @@ class ReviewQueueViewModel(
                             existingPaths.add(photoPathUri)
                         }
                         if (existingPaths.isNotEmpty()) {
-                            eventRepository.updateEvent(existingEv.copy(photoPath = existingPaths.joinToString(",")))
+                            eventRepository?.updateEvent(existingEv.copy(photoPath = existingPaths.joinToString(",")))
                         }
                     }
                 }
