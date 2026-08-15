@@ -1,5 +1,6 @@
 package com.schortgen.vehiclelogai.ui.timeline
 
+import android.net.Uri
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
@@ -14,13 +15,19 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
+import coil.compose.AsyncImage
+import coil.request.ImageRequest
 import com.schortgen.vehiclelogai.data.models.Event
 import com.schortgen.vehiclelogai.data.models.EventType
 import com.schortgen.vehiclelogai.data.models.calculateMpg
+import com.schortgen.vehiclelogai.data.models.getPhotoPaths
 import com.schortgen.vehiclelogai.navigation.Screen
 import com.schortgen.vehiclelogai.ui.events.EventViewModel
 import com.schortgen.vehiclelogai.ui.vehicles.VehicleViewModel
@@ -356,6 +363,48 @@ private fun TimelineEventCard(
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
+                        }
+                    }
+                }
+
+                val photoPaths = remember(event.photoPath) { event.getPhotoPaths() }
+                if (photoPaths.isNotEmpty()) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        photoPaths.take(4).forEach { path ->
+                            val data = if (path.startsWith("content://") || path.startsWith("file://")) Uri.parse(path) else path
+                            val model = ImageRequest.Builder(LocalContext.current)
+                                .data(data)
+                                .crossfade(true)
+                                .build()
+                            Box(
+                                modifier = Modifier
+                                    .size(36.dp)
+                                    .clip(RoundedCornerShape(6.dp))
+                            ) {
+                                AsyncImage(
+                                    model = model,
+                                    contentDescription = "Event photo",
+                                    contentScale = ContentScale.Crop,
+                                    modifier = Modifier.fillMaxSize()
+                                )
+                            }
+                        }
+                        if (photoPaths.size > 4) {
+                            Surface(
+                                shape = RoundedCornerShape(6.dp),
+                                color = MaterialTheme.colorScheme.surfaceVariant
+                            ) {
+                                Text(
+                                    text = "+${photoPaths.size - 4}",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
                         }
                     }
                 }

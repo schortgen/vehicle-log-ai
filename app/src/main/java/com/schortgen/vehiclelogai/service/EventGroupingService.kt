@@ -236,11 +236,14 @@ class EventGroupingService(
             mergeFuelCandidates(cluster.items)
         } else null
 
+        val allPhotos = cluster.items.mapNotNull { it.photoPath }.filter { it.isNotBlank() }.distinct()
+        val combinedPhotoPath = if (allPhotos.isNotEmpty()) allPhotos.joinToString(",") else cluster.representativePhotoPath
+
         return Event(
             vehicleId = vehicleId,
             eventType = eventType,
             eventDate = eventDate,
-            photoPath = cluster.representativePhotoPath,
+            photoPath = combinedPhotoPath,
             odometer = mergedFuelData?.odometer,
             tripDistance = mergedFuelData?.tripDistance,
             gallons = mergedFuelData?.gallons,

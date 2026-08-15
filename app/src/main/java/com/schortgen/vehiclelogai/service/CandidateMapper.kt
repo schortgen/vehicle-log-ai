@@ -54,6 +54,41 @@ object CandidateMapper {
     }
 
     /**
+     * Convert a reviewed FuelPurchaseCandidate into a VehicleEvent with multiple review items.
+     *
+     * @param candidate The reviewed (and possibly user-edited) candidate.
+     * @param vehicleId The selected vehicle ID.
+     * @param reviewItems The list of associated review items.
+     * @return A fully populated Event ready for insertion.
+     */
+    fun toEvent(
+        candidate: FuelPurchaseCandidate,
+        vehicleId: Long,
+        reviewItems: List<ReviewItem>
+    ): Event {
+        val primaryItem = reviewItems.firstOrNull()
+        val eventDate = parseDate(candidate.purchaseDate) ?: primaryItem?.captureDate ?: System.currentTimeMillis()
+        val allPhotos = reviewItems.mapNotNull { it.photoPath }.filter { it.isNotBlank() }.distinct()
+        val combinedPhotoPath = if (allPhotos.isNotEmpty()) allPhotos.joinToString(",") else null
+
+        return Event(
+            vehicleId = vehicleId,
+            eventType = EventType.FUEL,
+            eventDate = eventDate,
+            confidence = candidate.overallConfidence.takeIf { it > 0f },
+            verified = true,
+            notes = primaryItem?.let { buildNotes(candidate, it) },
+            odometer = candidate.odometer,
+            tripDistance = candidate.tripDistance,
+            gallons = candidate.gallons,
+            pricePerGallon = candidate.pricePerGallon,
+            totalCost = candidate.totalCost,
+            location = candidate.stationName,
+            photoPath = combinedPhotoPath
+        )
+    }
+
+    /**
      * Build notes that preserve traceability back to the original receipt.
      */
     private fun buildNotes(candidate: FuelPurchaseCandidate, reviewItem: ReviewItem): String {

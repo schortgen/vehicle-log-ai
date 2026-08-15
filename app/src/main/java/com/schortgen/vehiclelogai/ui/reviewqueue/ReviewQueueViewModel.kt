@@ -291,7 +291,13 @@ class ReviewQueueViewModel(
                 }
 
                 if (eventId != null && eventId > 0L) {
+                    val existingEv = eventRepository?.getEventById(eventId)
+                    val existingPaths = existingEv?.photoPath?.split(',', '|', '\n')?.map { it.trim() }?.filter { it.isNotBlank() }?.toMutableList() ?: mutableListOf()
+
                     galleryUris.forEach { localPath ->
+                        if (localPath.isNotBlank() && !existingPaths.contains(localPath)) {
+                            existingPaths.add(localPath)
+                        }
                         val newItem = ReviewItem(
                             photoPath = localPath,
                             captureDate = activeItem?.captureDate ?: System.currentTimeMillis(),
@@ -304,8 +310,17 @@ class ReviewQueueViewModel(
                     }
 
                     reviewItemsToAdd.forEach { uItem ->
+                        uItem.photoPath?.let { p ->
+                            if (p.isNotBlank() && !existingPaths.contains(p)) {
+                                existingPaths.add(p)
+                            }
+                        }
                         reviewItemRepository.updateReviewItem(uItem.copy(eventId = eventId))
                         processOcr(uItem.id)
+                    }
+
+                    if (existingEv != null && existingPaths.isNotEmpty()) {
+                        eventRepository.updateEvent(existingEv.copy(photoPath = existingPaths.joinToString(",")))
                     }
                 }
             } catch (e: Exception) {
@@ -318,6 +333,18 @@ class ReviewQueueViewModel(
         viewModelScope.launch {
             try {
                 reviewItemRepository.updateReviewItem(item.copy(eventId = eventId))
+                val existingEv = eventRepository?.getEventById(eventId)
+                if (existingEv != null) {
+                    val existingPaths = existingEv.photoPath?.split(',', '|', '\n')?.map { it.trim() }?.filter { it.isNotBlank() }?.toMutableList() ?: mutableListOf()
+                    item.photoPath?.let { p ->
+                        if (p.isNotBlank() && !existingPaths.contains(p)) {
+                            existingPaths.add(p)
+                        }
+                    }
+                    if (existingPaths.isNotEmpty()) {
+                        eventRepository.updateEvent(existingEv.copy(photoPath = existingPaths.joinToString(",")))
+                    }
+                }
                 processOcr(item.id)
             } catch (e: Exception) {
                 DiagnosticLogger.e("ReviewQueueVM", "Error adding photo to group $eventId", e)
@@ -347,6 +374,18 @@ class ReviewQueueViewModel(
 
                 if (eventId != null && eventId > 0L) {
                     reviewItemRepository.updateReviewItem(itemToGroup.copy(eventId = eventId))
+                    val existingEv = eventRepository?.getEventById(eventId)
+                    if (existingEv != null) {
+                        val existingPaths = existingEv.photoPath?.split(',', '|', '\n')?.map { it.trim() }?.filter { it.isNotBlank() }?.toMutableList() ?: mutableListOf()
+                        itemToGroup.photoPath?.let { p ->
+                            if (p.isNotBlank() && !existingPaths.contains(p)) {
+                                existingPaths.add(p)
+                            }
+                        }
+                        if (existingPaths.isNotEmpty()) {
+                            eventRepository.updateEvent(existingEv.copy(photoPath = existingPaths.joinToString(",")))
+                        }
+                    }
                     processOcr(itemToGroup.id)
                 }
             } catch (e: Exception) {
@@ -390,6 +429,18 @@ class ReviewQueueViewModel(
                     reason = "Added photo"
                 )
                 val newId = reviewItemRepository.insertReviewItem(newItem)
+                if (eventId != null && eventId > 0L) {
+                    val existingEv = eventRepository?.getEventById(eventId)
+                    if (existingEv != null) {
+                        val existingPaths = existingEv.photoPath?.split(',', '|', '\n')?.map { it.trim() }?.filter { it.isNotBlank() }?.toMutableList() ?: mutableListOf()
+                        if (photoPathUri.isNotBlank() && !existingPaths.contains(photoPathUri)) {
+                            existingPaths.add(photoPathUri)
+                        }
+                        if (existingPaths.isNotEmpty()) {
+                            eventRepository.updateEvent(existingEv.copy(photoPath = existingPaths.joinToString(",")))
+                        }
+                    }
+                }
                 processOcr(newId)
             } catch (e: Exception) {
                 DiagnosticLogger.e("ReviewQueueVM", "Error adding photo URI to group", e)
@@ -518,7 +569,7 @@ class ReviewQueueViewModel(
                 val itemWithPhoto = item.copy(photoPath = movedPhotoPath)
                 val event = CandidateMapper.toEvent(editedCandidate, vehicleId, itemWithPhoto)
 
-                eventRepository?.insertEvent(event) ?: run {
+                val insertedId = eventRepository?.insertEvent(event) ?: run {
                     _saveErrors.value = "Database error: Event repository not available"
                     return@launch
                 }
@@ -528,7 +579,7 @@ class ReviewQueueViewModel(
                 }
 
                 reviewItemRepository.updateReviewItem(
-                    itemWithPhoto.copy(status = ProcessingStatus.COMPLETE, vehicleId = vehicleId)
+                    itemWithPhoto.copy(status = ProcessingStatus.COMPLETE, vehicleId = vehicleId, eventId = insertedId)
                 )
             } catch (e: Exception) {
                 _saveErrors.value = "Error saving fuel event: ${e.message}"
@@ -577,20 +628,18 @@ class ReviewQueueViewModel(
                 }
                 reviewItemRepository.updateAllReviewItems(updatedItems)
 
-                // Update the event fields and mark as verified using the moved photo path
-                val repPhoto = existingEvent.photoPath
-                val movedRepPhoto = if (!repPhoto.isNullOrBlank()) {
-                    val matchingUpdatedItem = updatedItems.find { updatedItem ->
-                        associatedItems.any { oldItem -> oldItem.id == updatedItem.id && oldItem.photoPath == repPhoto }
-                    }
-                    if (matchingUpdatedItem != null) {
-                        matchingUpdatedItem.photoPath
-                    } else {
+                // Combine all moved photo paths for the event
+                val allMovedPhotos = updatedItems.mapNotNull { it.photoPath }.filter { it.isNotBlank() }.distinct()
+                val combinedPhotoPath = if (allMovedPhotos.isNotEmpty()) {
+                    allMovedPhotos.joinToString(",")
+                } else {
+                    val repPhoto = existingEvent.photoPath
+                    if (!repPhoto.isNullOrBlank()) {
                         val repResult = photoMoverService?.movePhotoIfEnabled(repPhoto)
                         repResult?.pendingDeleteUri?.let { pendingUris.add(it) }
                         repResult?.newPath ?: repPhoto
-                    }
-                } else null
+                    } else null
+                }
 
                 if (pendingUris.isNotEmpty()) {
                     val intentSender = photoMoverService?.createDeleteRequestIntentSender(pendingUris.distinct())
@@ -609,7 +658,7 @@ class ReviewQueueViewModel(
                     tripDistance = editedCandidate.tripDistance,
                     pricePerGallon = editedCandidate.pricePerGallon,
                     location = editedCandidate.stationName,
-                    photoPath = movedRepPhoto
+                    photoPath = combinedPhotoPath
                 )
 
                 eventRepository?.updateEvent(updatedEvent)

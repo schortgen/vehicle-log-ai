@@ -63,3 +63,11 @@ fun Event.calculateMpg(allEvents: List<Event> = emptyList()): Double? {
     return null
 }
 
+fun Event.getPhotoPaths(): List<String> {
+    if (photoPath.isNullOrBlank()) return emptyList()
+    return photoPath.split(',', '|', '\n')
+        .map { it.trim() }
+        .filter { it.isNotBlank() }
+        .distinct()
+}
+

@@ -32,6 +32,7 @@ import com.schortgen.vehiclelogai.VehicleLogAIApplication
 import com.schortgen.vehiclelogai.data.models.Event
 import com.schortgen.vehiclelogai.data.models.EventType
 import com.schortgen.vehiclelogai.data.models.calculateMpg
+import com.schortgen.vehiclelogai.data.models.getPhotoPaths
 import com.schortgen.vehiclelogai.ui.events.EventViewModel
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
@@ -59,7 +60,11 @@ fun EventDetailScreen(
         app?.reviewItemRepository?.observeByEvent(eventId) ?: kotlinx.coroutines.flow.flowOf(emptyList())
     }.collectAsState(initial = emptyList())
 
-    val photoPaths = remember(event, reviewItems) {
+    val scannedPhotos by remember(eventId, app) {
+        app?.database?.scannedPhotoDao()?.observeByEvent(eventId) ?: kotlinx.coroutines.flow.flowOf(emptyList())
+    }.collectAsState(initial = emptyList())
+
+    val photoPaths = remember(event, reviewItems, scannedPhotos) {
         val list = mutableListOf<String>()
         reviewItems.forEach { item ->
             val path = item.photoPath
@@ -67,14 +72,15 @@ fun EventDetailScreen(
                 list.add(path)
             }
         }
-        event?.photoPath?.let { path ->
-            if (path.isNotBlank()) {
-                val splitPaths = path.split(',', '|', '\n').map { it.trim() }.filter { it.isNotBlank() }
-                splitPaths.forEach { sp ->
-                    if (!list.contains(sp)) {
-                        list.add(sp)
-                    }
-                }
+        scannedPhotos.forEach { sp ->
+            val uri = sp.uri
+            if (uri.isNotBlank() && !list.contains(uri)) {
+                list.add(uri)
+            }
+        }
+        event?.getPhotoPaths()?.forEach { sp ->
+            if (!list.contains(sp)) {
+                list.add(sp)
             }
         }
         list
