@@ -65,9 +65,22 @@ fun Event.calculateMpg(allEvents: List<Event> = emptyList()): Double? {
 
 fun Event.getPhotoPaths(): List<String> {
     if (photoPath.isNullOrBlank()) return emptyList()
-    return photoPath.split(',', '|', '\n')
+    return photoPath.split(',', '|', '\n', ';')
         .map { it.trim() }
         .filter { it.isNotBlank() }
         .distinct()
+}
+
+fun String.toImageModel(): Any {
+    val trimmed = this.trim()
+    return when {
+        trimmed.startsWith("content://") -> android.net.Uri.parse(trimmed)
+        trimmed.startsWith("file://") -> android.net.Uri.parse(trimmed)
+        trimmed.startsWith("/") -> java.io.File(trimmed)
+        else -> {
+            val file = java.io.File(trimmed)
+            if (file.exists() || trimmed.contains("/")) file else android.net.Uri.parse(trimmed)
+        }
+    }
 }
 

@@ -30,6 +30,9 @@ interface ScannedPhotoDao {
     @Query("SELECT * FROM scanned_photos WHERE eventId = :eventId ORDER BY dateTaken ASC")
     fun observeByEvent(eventId: Long): Flow<List<ScannedPhoto>>
 
+    @Query("SELECT * FROM scanned_photos ORDER BY dateTaken DESC")
+    fun observeAll(): Flow<List<ScannedPhoto>>
+
     @Query("SELECT * FROM scanned_photos")
     suspend fun getAllScannedPhotos(): List<ScannedPhoto>
 

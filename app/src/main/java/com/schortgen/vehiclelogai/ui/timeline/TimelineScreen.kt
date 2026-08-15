@@ -28,8 +28,10 @@ import com.schortgen.vehiclelogai.VehicleLogAIApplication
 import com.schortgen.vehiclelogai.data.models.Event
 import com.schortgen.vehiclelogai.data.models.EventType
 import com.schortgen.vehiclelogai.data.models.ReviewItem
+import com.schortgen.vehiclelogai.data.models.ScannedPhoto
 import com.schortgen.vehiclelogai.data.models.calculateMpg
 import com.schortgen.vehiclelogai.data.models.getPhotoPaths
+import com.schortgen.vehiclelogai.data.models.toImageModel
 import com.schortgen.vehiclelogai.navigation.Screen
 import com.schortgen.vehiclelogai.ui.events.EventViewModel
 import com.schortgen.vehiclelogai.ui.vehicles.VehicleViewModel
@@ -51,6 +53,10 @@ fun TimelineScreen(
     val app = context.applicationContext as? VehicleLogAIApplication
     val reviewItems by remember(app) {
         app?.reviewItemRepository?.observeAllReviewItems() ?: kotlinx.coroutines.flow.flowOf(emptyList())
+    }.collectAsState(initial = emptyList())
+
+    val scannedPhotos by remember(app) {
+        app?.database?.scannedPhotoDao()?.observeAll() ?: kotlinx.coroutines.flow.flowOf(emptyList())
     }.collectAsState(initial = emptyList())
 
     var searchQuery by remember { mutableStateOf("") }
@@ -230,6 +236,7 @@ fun TimelineScreen(
                             event = event,
                             allEvents = events,
                             reviewItems = reviewItems,
+                            scannedPhotos = scannedPhotos,
                             vehicleName = vehicleName,
                             dateFormat = dateFormat,
                             onClick = {
@@ -248,6 +255,7 @@ private fun TimelineEventCard(
     event: Event,
     allEvents: List<Event> = emptyList(),
     reviewItems: List<ReviewItem> = emptyList(),
+    scannedPhotos: List<ScannedPhoto> = emptyList(),
     vehicleName: String?,
     dateFormat: SimpleDateFormat,
     onClick: () -> Unit
@@ -377,17 +385,24 @@ private fun TimelineEventCard(
                     }
                 }
 
-                val photoPaths = remember(event.photoPath, reviewItems) {
+                val photoPaths = remember(event, reviewItems, scannedPhotos) {
                     val list = mutableListOf<String>()
                     reviewItems.filter { it.eventId == event.id }.forEach { item ->
                         val path = item.photoPath
-                        if (!path.isNullOrBlank() && !list.contains(path)) {
-                            list.add(path)
+                        if (!path.isNullOrBlank() && !list.contains(path.trim())) {
+                            list.add(path.trim())
+                        }
+                    }
+                    scannedPhotos.filter { it.eventId == event.id }.forEach { sp ->
+                        val uri = sp.uri
+                        if (uri.isNotBlank() && !list.contains(uri.trim())) {
+                            list.add(uri.trim())
                         }
                     }
                     event.getPhotoPaths().forEach { sp ->
-                        if (sp.isNotBlank() && !list.contains(sp)) {
-                            list.add(sp)
+                        val trimmed = sp.trim()
+                        if (trimmed.isNotBlank() && !list.contains(trimmed)) {
+                            list.add(trimmed)
                         }
                     }
                     list
@@ -399,9 +414,8 @@ private fun TimelineEventCard(
                         horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
                         photoPaths.take(4).forEach { path ->
-                            val data = if (path.startsWith("content://") || path.startsWith("file://")) Uri.parse(path) else path
                             val model = ImageRequest.Builder(LocalContext.current)
-                                .data(data)
+                                .data(path.toImageModel())
                                 .crossfade(true)
                                 .build()
                             Box(

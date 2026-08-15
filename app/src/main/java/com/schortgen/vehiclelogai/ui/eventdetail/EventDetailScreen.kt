@@ -33,6 +33,7 @@ import com.schortgen.vehiclelogai.data.models.Event
 import com.schortgen.vehiclelogai.data.models.EventType
 import com.schortgen.vehiclelogai.data.models.calculateMpg
 import com.schortgen.vehiclelogai.data.models.getPhotoPaths
+import com.schortgen.vehiclelogai.data.models.toImageModel
 import com.schortgen.vehiclelogai.ui.events.EventViewModel
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
@@ -68,19 +69,20 @@ fun EventDetailScreen(
         val list = mutableListOf<String>()
         reviewItems.forEach { item ->
             val path = item.photoPath
-            if (!path.isNullOrBlank() && !list.contains(path)) {
-                list.add(path)
+            if (!path.isNullOrBlank() && !list.contains(path.trim())) {
+                list.add(path.trim())
             }
         }
         scannedPhotos.forEach { sp ->
             val uri = sp.uri
-            if (uri.isNotBlank() && !list.contains(uri)) {
-                list.add(uri)
+            if (uri.isNotBlank() && !list.contains(uri.trim())) {
+                list.add(uri.trim())
             }
         }
         event?.getPhotoPaths()?.forEach { sp ->
-            if (!list.contains(sp)) {
-                list.add(sp)
+            val trimmed = sp.trim()
+            if (trimmed.isNotBlank() && !list.contains(trimmed)) {
+                list.add(trimmed)
             }
         }
         list
@@ -443,9 +445,8 @@ fun EventDetailScreen(
 
                                 if (photoPaths.size == 1) {
                                     val path = photoPaths.first()
-                                    val data = if (path.startsWith("content://") || path.startsWith("file://")) Uri.parse(path) else path
                                     val model = ImageRequest.Builder(context)
-                                        .data(data)
+                                        .data(path.toImageModel())
                                         .crossfade(true)
                                         .build()
 
@@ -473,9 +474,8 @@ fun EventDetailScreen(
                                         modifier = Modifier.fillMaxWidth()
                                     ) {
                                         itemsIndexed(photoPaths) { index, path ->
-                                            val data = if (path.startsWith("content://") || path.startsWith("file://")) Uri.parse(path) else path
                                             val model = ImageRequest.Builder(context)
-                                                .data(data)
+                                                .data(path.toImageModel())
                                                 .crossfade(true)
                                                 .build()
 
@@ -591,9 +591,8 @@ fun EventDetailScreen(
         if (showImageDialog && photoPaths.isNotEmpty()) {
             val safeIndex = selectedPhotoIndex.coerceIn(0, photoPaths.lastIndex)
             val photoPath = photoPaths[safeIndex]
-            val data = if (photoPath.startsWith("content://") || photoPath.startsWith("file://")) Uri.parse(photoPath) else photoPath
             val model = ImageRequest.Builder(context)
-                .data(data)
+                .data(photoPath.toImageModel())
                 .build()
 
             Dialog(

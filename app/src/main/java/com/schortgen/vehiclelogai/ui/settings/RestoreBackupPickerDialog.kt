@@ -19,6 +19,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -37,9 +38,12 @@ fun RestoreBackupPickerDialog(
     onSelectFile: (Uri) -> Unit,
     onSelectFolderUri: (Uri) -> Unit,
     onBrowseSystemPicker: () -> Unit,
+    onRescan: (() -> Unit)? = null,
     onDismiss: () -> Unit
 ) {
+    var selectedTab by remember { mutableIntStateOf(0) } // 0 = Discovered Backups, 1 = Browse Folders
     var searchQuery by remember { mutableStateOf("") }
+    var showOnlyJson by remember { mutableStateOf(false) }
 
     val rootDir = remember {
         val ext = Environment.getExternalStorageDirectory()
@@ -59,19 +63,26 @@ fun RestoreBackupPickerDialog(
     val shortcutDirs = remember {
         val list = mutableListOf<File>()
         listOf(
-            Environment.DIRECTORY_DCIM,
-            Environment.DIRECTORY_PICTURES,
             Environment.DIRECTORY_DOWNLOADS,
-            Environment.DIRECTORY_DOCUMENTS
+            Environment.DIRECTORY_DOCUMENTS,
+            Environment.DIRECTORY_DCIM,
+            Environment.DIRECTORY_PICTURES
         ).forEach { dirType ->
             runCatching {
                 val d = Environment.getExternalStoragePublicDirectory(dirType)
                 if (d != null && d.exists()) list.add(d)
             }
         }
-        val dcimCamera = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DCIM), "Camera")
-        if (dcimCamera.exists() && !list.contains(dcimCamera)) list.add(dcimCamera)
         list
+    }
+
+    // Filtered discovered backup files
+    val filteredDiscoveredFiles = remember(backupFiles, searchQuery, showOnlyJson) {
+        backupFiles.filter { item ->
+            val matchesSearch = searchQuery.isBlank() || item.name.contains(searchQuery, ignoreCase = true) || item.path.contains(searchQuery, ignoreCase = true)
+            val matchesType = !showOnlyJson || item.isJson
+            matchesSearch && matchesType
+        }
     }
 
     val folderContents = remember(currentFolder, searchQuery) {
@@ -127,8 +138,8 @@ fun RestoreBackupPickerDialog(
         Card(
             modifier = Modifier
                 .fillMaxWidth(0.95f)
-                .fillMaxHeight(0.88f)
-                .padding(16.dp),
+                .fillMaxHeight(0.90f)
+                .padding(12.dp),
             shape = RoundedCornerShape(16.dp),
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
         ) {
@@ -143,14 +154,14 @@ fun RestoreBackupPickerDialog(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Column {
+                    Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = "Browse Storage & Restore",
+                            text = "Restore VehicleLogAI Backup",
                             style = MaterialTheme.typography.titleLarge,
                             fontWeight = FontWeight.Bold
                         )
                         Text(
-                            text = "Select a JSON backup file to restore your data",
+                            text = "Select a backup JSON file to restore your vehicles and events",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -160,9 +171,20 @@ fun RestoreBackupPickerDialog(
                     }
                 }
 
-                Spacer(modifier = Modifier.height(12.dp))
+                if (isScanning) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = "Scanning device storage for backups...",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
 
-                // Fast Action Buttons at the Top
+                Spacer(modifier = Modifier.height(10.dp))
+
+                // Fast Action Buttons
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -174,7 +196,7 @@ fun RestoreBackupPickerDialog(
                     ) {
                         Icon(Icons.Default.FileOpen, contentDescription = null, modifier = Modifier.size(16.dp))
                         Spacer(modifier = Modifier.width(6.dp))
-                        Text("System Picker (All)", maxLines = 1, style = MaterialTheme.typography.labelMedium)
+                        Text("System File Picker", maxLines = 1, style = MaterialTheme.typography.labelMedium)
                     }
                     FilledTonalButton(
                         onClick = { folderPickerLauncher.launch(null) },
@@ -189,64 +211,44 @@ fun RestoreBackupPickerDialog(
 
                 Spacer(modifier = Modifier.height(10.dp))
 
-                // Quick Folder Jump Chips (DCIM, Pictures, Download, Documents)
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .horizontalScroll(rememberScrollState()),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                // Tab Row: Discovered Backups vs Folder Explorer
+                TabRow(
+                    selectedTabIndex = selectedTab,
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                    shape = RoundedCornerShape(8.dp)
                 ) {
-                    val isRootSelected = currentFolder == rootDir
-                    FilterChip(
-                        selected = isRootSelected,
-                        onClick = { currentFolder = rootDir },
-                        label = {
+                    Tab(
+                        selected = selectedTab == 0,
+                        onClick = { selectedTab = 0 },
+                        text = {
                             Text(
-                                text = "Device Storage",
-                                style = MaterialTheme.typography.labelSmall,
-                                maxLines = 1
-                            )
-                        },
-                        leadingIcon = {
-                            Icon(
-                                Icons.Default.Storage,
-                                contentDescription = null,
-                                modifier = Modifier.size(14.dp)
+                                "Discovered Files (${backupFiles.size})",
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = if (selectedTab == 0) FontWeight.Bold else FontWeight.Normal
                             )
                         }
                     )
-
-                    shortcutDirs.forEach { dir ->
-                        val isSelected = currentFolder == dir
-                        FilterChip(
-                            selected = isSelected,
-                            onClick = { currentFolder = dir },
-                            label = {
-                                Text(
-                                    text = dir.name,
-                                    style = MaterialTheme.typography.labelSmall,
-                                    maxLines = 1
-                                )
-                            },
-                            leadingIcon = {
-                                Icon(
-                                    Icons.Default.Folder,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(14.dp)
-                                )
-                            }
-                        )
-                    }
+                    Tab(
+                        selected = selectedTab == 1,
+                        onClick = { selectedTab = 1 },
+                        text = {
+                            Text(
+                                "Folder Explorer",
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = if (selectedTab == 1) FontWeight.Bold else FontWeight.Normal
+                            )
+                        }
+                    )
                 }
 
                 Spacer(modifier = Modifier.height(8.dp))
 
-                // Search/Filter Bar
+                // Search Bar
                 OutlinedTextField(
                     value = searchQuery,
                     onValueChange = { searchQuery = it },
                     modifier = Modifier.fillMaxWidth(),
-                    placeholder = { Text("Filter files & folders...") },
+                    placeholder = { Text(if (selectedTab == 0) "Search backup files..." else "Filter current folder...") },
                     leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
                     trailingIcon = {
                         if (searchQuery.isNotEmpty()) {
@@ -260,142 +262,263 @@ fun RestoreBackupPickerDialog(
 
                 Spacer(modifier = Modifier.height(8.dp))
 
-                // Current Path Breadcrumb & Navigation Bar
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
-                        .padding(horizontal = 8.dp, vertical = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    if (currentFolder.parentFile != null && currentFolder != rootDir) {
-                        IconButton(
-                            onClick = { currentFolder.parentFile?.let { currentFolder = it } },
-                            modifier = Modifier.size(32.dp)
-                        ) {
-                            Icon(Icons.Default.ArrowBack, contentDescription = "Up", modifier = Modifier.size(18.dp))
-                        }
-                        Spacer(modifier = Modifier.width(4.dp))
-                    } else {
-                        Icon(
-                            Icons.Default.Folder,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(20.dp)
-                        )
-                        Spacer(modifier = Modifier.width(6.dp))
-                    }
-                    Text(
-                        text = if (currentFolder == rootDir) "Device Storage" else currentFolder.absolutePath.replace(rootDir.absolutePath, "Storage"),
-                        style = MaterialTheme.typography.labelMedium,
-                        fontWeight = FontWeight.Bold,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                }
-
-                Spacer(modifier = Modifier.height(8.dp))
-
-                // Full Expanded Folder & File Browser
-                if (folderContents.isEmpty()) {
-                    Box(
+                if (selectedTab == 0) {
+                    // Filter Chips Row
+                    Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .weight(1f),
-                        contentAlignment = Alignment.Center
+                            .horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Column(
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            modifier = Modifier.padding(16.dp)
-                        ) {
-                            Icon(
-                                Icons.Default.FolderOpen,
-                                contentDescription = null,
-                                modifier = Modifier.size(48.dp),
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                            Spacer(modifier = Modifier.height(12.dp))
-                            Text(
-                                text = if (searchQuery.isNotBlank()) "No files match \"$searchQuery\"" else "No files or folders found here.",
-                                style = MaterialTheme.typography.bodyMedium,
-                                fontWeight = FontWeight.Medium
-                            )
-                            Spacer(modifier = Modifier.height(4.dp))
-                            Text(
-                                text = "Use 'System Picker' or 'Pick Folder' above to access any file or external directory.",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                            Spacer(modifier = Modifier.height(12.dp))
-                            Button(
-                                onClick = onBrowseSystemPicker,
-                                contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp)
+                        FilterChip(
+                            selected = !showOnlyJson,
+                            onClick = { showOnlyJson = false },
+                            label = { Text("All Files (${backupFiles.size})", style = MaterialTheme.typography.labelSmall) }
+                        )
+                        val jsonCount = remember(backupFiles) { backupFiles.count { it.isJson } }
+                        FilterChip(
+                            selected = showOnlyJson,
+                            onClick = { showOnlyJson = true },
+                            label = { Text("JSON Backups (${jsonCount})", style = MaterialTheme.typography.labelSmall) },
+                            leadingIcon = {
+                                Icon(Icons.Default.Description, contentDescription = null, modifier = Modifier.size(14.dp))
+                            }
+                        )
+                        if (onRescan != null) {
+                            FilledTonalIconButton(
+                                onClick = onRescan,
+                                modifier = Modifier.size(32.dp)
                             ) {
-                                Icon(Icons.Default.FileOpen, contentDescription = null, modifier = Modifier.size(16.dp))
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text("Open System File Picker")
+                                Icon(Icons.Default.Refresh, contentDescription = "Rescan", modifier = Modifier.size(16.dp))
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    // Discovered Backups List
+                    if (filteredDiscoveredFiles.isEmpty()) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .weight(1f),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                modifier = Modifier.padding(16.dp)
+                            ) {
+                                Icon(
+                                    Icons.Default.SearchOff,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(48.dp),
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Spacer(modifier = Modifier.height(12.dp))
+                                Text(
+                                    text = if (searchQuery.isNotBlank()) "No files match \"$searchQuery\"" else "No backup files found on device storage.",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.Medium
+                                )
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(
+                                    text = "Use the System File Picker to locate your JSON backup file anywhere on your device or Google Drive.",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                                )
+                                Spacer(modifier = Modifier.height(16.dp))
+                                Button(
+                                    onClick = onBrowseSystemPicker,
+                                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
+                                ) {
+                                    Icon(Icons.Default.FileOpen, contentDescription = null, modifier = Modifier.size(18.dp))
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text("Open System File Picker")
+                                }
+                            }
+                        }
+                    } else {
+                        LazyColumn(
+                            verticalArrangement = Arrangement.spacedBy(6.dp),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            items(filteredDiscoveredFiles) { item ->
+                                BackupFileCard(
+                                    item = item,
+                                    onClick = { onSelectFile(item.uri) }
+                                )
                             }
                         }
                     }
                 } else {
-                    LazyColumn(
-                        verticalArrangement = Arrangement.spacedBy(6.dp),
-                        modifier = Modifier.weight(1f)
+                    // Folder Explorer Tab
+                    // Quick Folder Jump Chips
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
-                        items(folderContents) { node ->
-                            if (node.isDirectory) {
-                                Card(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .clickable {
-                                            searchQuery = ""
-                                            currentFolder = node.file
-                                        },
-                                    colors = CardDefaults.cardColors(
-                                        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
-                                    )
+                        val isRootSelected = currentFolder == rootDir
+                        FilterChip(
+                            selected = isRootSelected,
+                            onClick = { currentFolder = rootDir },
+                            label = { Text("Device Storage", style = MaterialTheme.typography.labelSmall) },
+                            leadingIcon = { Icon(Icons.Default.Storage, contentDescription = null, modifier = Modifier.size(14.dp)) }
+                        )
+
+                        shortcutDirs.forEach { dir ->
+                            val isSelected = currentFolder == dir
+                            FilterChip(
+                                selected = isSelected,
+                                onClick = { currentFolder = dir },
+                                label = { Text(dir.name, style = MaterialTheme.typography.labelSmall) },
+                                leadingIcon = { Icon(Icons.Default.Folder, contentDescription = null, modifier = Modifier.size(14.dp)) }
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(6.dp))
+
+                    // Current Path Breadcrumb
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+                            .padding(horizontal = 8.dp, vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        if (currentFolder.parentFile != null && currentFolder != rootDir) {
+                            IconButton(
+                                onClick = { currentFolder.parentFile?.let { currentFolder = it } },
+                                modifier = Modifier.size(32.dp)
+                            ) {
+                                Icon(Icons.Default.ArrowBack, contentDescription = "Up", modifier = Modifier.size(18.dp))
+                            }
+                            Spacer(modifier = Modifier.width(4.dp))
+                        } else {
+                            Icon(
+                                Icons.Default.Folder,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                        }
+                        Text(
+                            text = if (currentFolder == rootDir) "Device Storage" else currentFolder.absolutePath.replace(rootDir.absolutePath, "Storage"),
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    if (folderContents.isEmpty()) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .weight(1f),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                modifier = Modifier.padding(16.dp)
+                            ) {
+                                Icon(
+                                    Icons.Default.FolderOpen,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(48.dp),
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Spacer(modifier = Modifier.height(12.dp))
+                                Text(
+                                    text = if (searchQuery.isNotBlank()) "No files match \"$searchQuery\"" else "No accessible files or subfolders here.",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.Medium
+                                )
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(
+                                    text = "Scoped storage may restrict direct filesystem browsing. Use the System File Picker to choose any file directly.",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                                )
+                                Spacer(modifier = Modifier.height(16.dp))
+                                Button(
+                                    onClick = onBrowseSystemPicker,
+                                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
                                 ) {
-                                    Row(
+                                    Icon(Icons.Default.FileOpen, contentDescription = null, modifier = Modifier.size(18.dp))
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text("Open System File Picker")
+                                }
+                            }
+                        }
+                    } else {
+                        LazyColumn(
+                            verticalArrangement = Arrangement.spacedBy(6.dp),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            items(folderContents) { node ->
+                                if (node.isDirectory) {
+                                    Card(
                                         modifier = Modifier
                                             .fillMaxWidth()
-                                            .padding(12.dp),
-                                        verticalAlignment = Alignment.CenterVertically
+                                            .clickable {
+                                                searchQuery = ""
+                                                currentFolder = node.file
+                                            },
+                                        colors = CardDefaults.cardColors(
+                                            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
+                                        )
                                     ) {
-                                        Icon(
-                                            imageVector = Icons.Default.Folder,
-                                            contentDescription = null,
-                                            tint = MaterialTheme.colorScheme.primary,
-                                            modifier = Modifier.size(26.dp)
-                                        )
-                                        Spacer(modifier = Modifier.width(12.dp))
-                                        Column(modifier = Modifier.weight(1f)) {
-                                            Text(
-                                                text = node.name,
-                                                fontWeight = FontWeight.Medium,
-                                                style = MaterialTheme.typography.bodyMedium
+                                        Row(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(12.dp),
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.Folder,
+                                                contentDescription = null,
+                                                tint = MaterialTheme.colorScheme.primary,
+                                                modifier = Modifier.size(26.dp)
                                             )
-                                            if (node.containsBackupFilesCount > 0) {
+                                            Spacer(modifier = Modifier.width(12.dp))
+                                            Column(modifier = Modifier.weight(1f)) {
                                                 Text(
-                                                    text = "Contains ${node.containsBackupFilesCount} JSON backup file${if (node.containsBackupFilesCount > 1) "s" else ""}",
-                                                    style = MaterialTheme.typography.labelSmall,
-                                                    color = MaterialTheme.colorScheme.primary
+                                                    text = node.name,
+                                                    fontWeight = FontWeight.Medium,
+                                                    style = MaterialTheme.typography.bodyMedium
                                                 )
+                                                if (node.containsBackupFilesCount > 0) {
+                                                    Text(
+                                                        text = "Contains ${node.containsBackupFilesCount} JSON backup file${if (node.containsBackupFilesCount > 1) "s" else ""}",
+                                                        style = MaterialTheme.typography.labelSmall,
+                                                        color = MaterialTheme.colorScheme.primary
+                                                    )
+                                                }
                                             }
+                                            Icon(
+                                                imageVector = Icons.Default.ChevronRight,
+                                                contentDescription = null,
+                                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                modifier = Modifier.size(20.dp)
+                                            )
                                         }
-                                        Icon(
-                                            imageVector = Icons.Default.ChevronRight,
-                                            contentDescription = null,
-                                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                            modifier = Modifier.size(20.dp)
-                                        )
                                     }
+                                } else if (node.backupItem != null) {
+                                    BackupFileCard(
+                                        item = node.backupItem,
+                                        onClick = { onSelectFile(node.backupItem.uri) }
+                                    )
                                 }
-                            } else if (node.backupItem != null) {
-                                BackupFileCard(
-                                    item = node.backupItem,
-                                    onClick = { onSelectFile(node.backupItem.uri) }
-                                )
                             }
                         }
                     }

@@ -22,10 +22,12 @@ import coil.request.ImageRequest
 import com.schortgen.vehiclelogai.VehicleLogAIApplication
 import com.schortgen.vehiclelogai.data.models.EventType
 import com.schortgen.vehiclelogai.data.models.ReviewItem
+import com.schortgen.vehiclelogai.data.models.ScannedPhoto
 import com.schortgen.vehiclelogai.data.models.Vehicle
 import com.schortgen.vehiclelogai.data.models.calculateMpg
 import com.schortgen.vehiclelogai.data.models.displayName
 import com.schortgen.vehiclelogai.data.models.getPhotoPaths
+import com.schortgen.vehiclelogai.data.models.toImageModel
 import com.schortgen.vehiclelogai.navigation.Screen
 import com.schortgen.vehiclelogai.ui.events.EventViewModel
 import com.schortgen.vehiclelogai.ui.vehicles.VehicleViewModel
@@ -55,6 +57,10 @@ fun VehicleDetailScreen(
     val app = context.applicationContext as? VehicleLogAIApplication
     val reviewItems by remember(app) {
         app?.reviewItemRepository?.observeAllReviewItems() ?: kotlinx.coroutines.flow.flowOf(emptyList())
+    }.collectAsState(initial = emptyList())
+
+    val scannedPhotos by remember(app) {
+        app?.database?.scannedPhotoDao()?.observeAll() ?: kotlinx.coroutines.flow.flowOf(emptyList())
     }.collectAsState(initial = emptyList())
 
     val dateFormat = remember { SimpleDateFormat("MMM dd, yyyy HH:mm", Locale.getDefault()) }
@@ -102,11 +108,11 @@ fun VehicleDetailScreen(
                         Column(modifier = Modifier.padding(16.dp)) {
                             Text(text = "Details", style = MaterialTheme.typography.titleMedium)
                             Spacer(modifier = Modifier.height(8.dp))
-                            Text("Year: ${vehicle?.year ?: "N/A"}")
-                            Text("Make: ${vehicle?.make ?: "N/A"}")
-                            Text("Model: ${vehicle?.model ?: "N/A"}")
-                            Text("VIN: ${vehicle?.vin ?: "N/A"}")
-                            Text("Mileage: ${vehicle?.currentMileage ?: "N/A"}")
+                            Text("Year: ${vehicle.year ?: "N/A"}")
+                            Text("Make: ${vehicle.make ?: "N/A"}")
+                            Text("Model: ${vehicle.model ?: "N/A"}")
+                            Text("VIN: ${vehicle.vin ?: "N/A"}")
+                            Text("Mileage: ${vehicle.currentMileage ?: "N/A"}")
                         }
                     }
                 }
@@ -167,6 +173,7 @@ fun VehicleDetailScreen(
                             event = event,
                             allEvents = sortedEvents,
                             reviewItems = reviewItems,
+                            scannedPhotos = scannedPhotos,
                             dateFormat = dateFormat,
                             onClick = {
                                 navController.navigate(Screen.EventDetail.createRoute(event.id))
@@ -189,6 +196,7 @@ private fun TimelineCard(
     event: com.schortgen.vehiclelogai.data.models.Event,
     allEvents: List<com.schortgen.vehiclelogai.data.models.Event> = emptyList(),
     reviewItems: List<ReviewItem> = emptyList(),
+    scannedPhotos: List<ScannedPhoto> = emptyList(),
     dateFormat: SimpleDateFormat,
     onClick: () -> Unit
 ) {
@@ -314,17 +322,24 @@ private fun TimelineCard(
                     }
                 }
 
-                val photoPaths = remember(event.photoPath, reviewItems) {
+                val photoPaths = remember(event, reviewItems, scannedPhotos) {
                     val list = mutableListOf<String>()
                     reviewItems.filter { it.eventId == event.id }.forEach { item ->
                         val path = item.photoPath
-                        if (!path.isNullOrBlank() && !list.contains(path)) {
-                            list.add(path)
+                        if (!path.isNullOrBlank() && !list.contains(path.trim())) {
+                            list.add(path.trim())
+                        }
+                    }
+                    scannedPhotos.filter { it.eventId == event.id }.forEach { sp ->
+                        val uri = sp.uri
+                        if (uri.isNotBlank() && !list.contains(uri.trim())) {
+                            list.add(uri.trim())
                         }
                     }
                     event.getPhotoPaths().forEach { sp ->
-                        if (sp.isNotBlank() && !list.contains(sp)) {
-                            list.add(sp)
+                        val trimmed = sp.trim()
+                        if (trimmed.isNotBlank() && !list.contains(trimmed)) {
+                            list.add(trimmed)
                         }
                     }
                     list
@@ -336,9 +351,8 @@ private fun TimelineCard(
                         horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
                         photoPaths.take(4).forEach { path ->
-                            val data = if (path.startsWith("content://") || path.startsWith("file://")) Uri.parse(path) else path
                             val model = ImageRequest.Builder(LocalContext.current)
-                                .data(data)
+                                .data(path.toImageModel())
                                 .crossfade(true)
                                 .build()
                             Box(

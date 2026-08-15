@@ -72,8 +72,8 @@ fun SettingsScreen(
     }
 
     val restoreLauncher = rememberLauncherForActivityResult(
-        contract = OpenBackupDocumentContract()
-    ) { uri ->
+        contract = ActivityResultContracts.OpenDocument()
+    ) { uri: Uri? ->
         if (uri != null) {
             pendingRestoreUri = uri
         }
@@ -582,36 +582,14 @@ fun SettingsScreen(
                         "application/json",
                         "text/json",
                         "text/plain",
-                        "application/octet-stream",
-                        "text/x-json"
+                        "application/octet-stream"
                     )
                 )
             },
+            onRescan = {
+                viewModel.scanForBackupFiles(context)
+            },
             onDismiss = { showRestorePickerDialog = false }
         )
-    }
-}
-
-class OpenBackupDocumentContract : ActivityResultContract<Array<String>, Uri?>() {
-    override fun createIntent(context: Context, input: Array<String>): Intent {
-        return Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
-            addCategory(Intent.CATEGORY_OPENABLE)
-            // Use */* with EXTRA_MIME_TYPES so all document providers, Download managers,
-            // DCIM folders, and OEM file explorers show and enable files without graying them out
-            type = "*/*"
-            val mimeTypes = if (input.isNotEmpty()) input else arrayOf(
-                "*/*",
-                "application/json",
-                "text/json",
-                "text/plain",
-                "application/octet-stream",
-                "text/x-json"
-            )
-            putExtra(Intent.EXTRA_MIME_TYPES, mimeTypes)
-        }
-    }
-
-    override fun parseResult(resultCode: Int, intent: Intent?): Uri? {
-        return if (resultCode == android.app.Activity.RESULT_OK) intent?.data else null
     }
 }

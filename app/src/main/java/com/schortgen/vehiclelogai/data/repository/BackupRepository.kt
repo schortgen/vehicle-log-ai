@@ -55,19 +55,31 @@ class BackupRepository(
 
     suspend fun importBackup(context: Context, uri: Uri, clearExisting: Boolean = true): Result<BackupData> = withContext(Dispatchers.IO) {
         try {
-            val mimeType = context.contentResolver.getType(uri)
+            val mimeType = runCatching { context.contentResolver.getType(uri) }.getOrNull()
             if (mimeType?.startsWith("image/") == true) {
-                return@withContext Result.failure(Exception("Selected file is an image/photo. Please select a valid JSON backup file."))
+                return@withContext Result.failure(Exception("Selected file is an image. Please select a valid JSON backup file."))
             }
 
-            val backupData = context.contentResolver.openInputStream(uri)?.use { inputStream ->
-                InputStreamReader(inputStream, Charsets.UTF_8).use { reader ->
-                    gson.fromJson(reader, BackupData::class.java)
+            val jsonString: String = runCatching {
+                context.contentResolver.openInputStream(uri)?.use { inputStream ->
+                    inputStream.bufferedReader(Charsets.UTF_8).readText()
                 }
-            } ?: return@withContext Result.failure(Exception("Could not open file input stream for reading."))
+            }.getOrNull() ?: runCatching {
+                val path = uri.path
+                if (path != null) {
+                    val file = java.io.File(path)
+                    if (file.exists()) file.readText(Charsets.UTF_8) else null
+                } else null
+            }.getOrNull() ?: return@withContext Result.failure(Exception("Could not open the selected backup file for reading."))
 
-            if (backupData == null) {
-                return@withContext Result.failure(Exception("Invalid or empty backup file."))
+            val backupData = try {
+                gson.fromJson(jsonString, BackupData::class.java)
+            } catch (e: Exception) {
+                return@withContext Result.failure(Exception("Invalid backup JSON format: ${e.message}"))
+            }
+
+            if (backupData == null || (backupData.vehicles.isEmpty() && backupData.events.isEmpty() && backupData.reviewItems.isEmpty())) {
+                return@withContext Result.failure(Exception("The selected file does not contain valid VehicleLogAI backup data."))
             }
 
             database.withTransaction {
