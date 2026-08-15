@@ -107,7 +107,12 @@ fun NavGraph(
         )
     )
     val settingsViewModel: SettingsViewModel = viewModel(
-        factory = SettingsViewModelFactory(app.settingsRepository, app.backupRepository)
+        factory = SettingsViewModelFactory(
+            settingsRepository = app.settingsRepository,
+            backupRepository = app.backupRepository,
+            photoMoverService = app.photoMoverService,
+            database = app.database
+        )
     )
     val actualDashboardViewModel: DashboardViewModel = dashboardViewModel ?: viewModel(
         factory = DashboardViewModelFactory(

@@ -4,6 +4,7 @@ import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
+import androidx.room.Update
 import com.schortgen.vehiclelogai.data.models.ScannedPhoto
 import kotlinx.coroutines.flow.Flow
 
@@ -11,6 +12,12 @@ import kotlinx.coroutines.flow.Flow
 interface ScannedPhotoDao {
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insert(scannedPhoto: ScannedPhoto)
+
+    @Update
+    suspend fun update(scannedPhoto: ScannedPhoto)
+
+    @Update
+    suspend fun updateAll(scannedPhotos: List<ScannedPhoto>)
 
     @Query("SELECT mediaStoreId FROM scanned_photos")
     suspend fun getAllMediaStoreIds(): List<Long>

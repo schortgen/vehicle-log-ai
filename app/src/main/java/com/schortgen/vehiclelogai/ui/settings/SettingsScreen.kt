@@ -44,9 +44,14 @@ fun SettingsScreen(
     val backupStatusMessage by viewModel.backupStatusMessage.collectAsState()
     val discoveredBackupFiles by viewModel.discoveredBackupFiles.collectAsState()
     val isScanningBackups by viewModel.isScanningBackups.collectAsState()
+    val isMigratingPhotos by viewModel.isMigratingPhotos.collectAsState()
+    val migrationStatusMessage by viewModel.migrationStatusMessage.collectAsState()
 
     var pendingRestoreUri by remember { mutableStateOf<Uri?>(null) }
     var showRestorePickerDialog by remember { mutableStateOf(false) }
+    var pendingMoveFolderUri by remember { mutableStateOf<Uri?>(null) }
+    var pendingMoveFolderName by remember { mutableStateOf<String?>(null) }
+    var showMoveConfirmDialog by remember { mutableStateOf(false) }
 
     val folderPickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocumentTree()
@@ -60,6 +65,22 @@ fun SettingsScreen(
             val folderName = docFile?.name ?: uri.lastPathSegment ?: "Custom Folder"
             viewModel.setCompletedPhotosFolder(uri.toString(), folderName)
             viewModel.updateMovePhotosOnComplete(true)
+        }
+    }
+
+    val moveFolderPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocumentTree()
+    ) { uri: Uri? ->
+        if (uri != null) {
+            val flags = Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+            try {
+                context.contentResolver.takePersistableUriPermission(uri, flags)
+            } catch (_: Exception) {}
+            val docFile = DocumentFile.fromTreeUri(context, uri)
+            val folderName = docFile?.name ?: uri.lastPathSegment ?: "Selected Folder"
+            pendingMoveFolderUri = uri
+            pendingMoveFolderName = folderName
+            showMoveConfirmDialog = true
         }
     }
 
@@ -305,12 +326,11 @@ fun SettingsScreen(
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .clickable { folderPickerLauncher.launch(null) }
                                 .padding(vertical = 4.dp),
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
-                            Column(modifier = Modifier.weight(1f)) {
+                            Column(modifier = Modifier.weight(1f).padding(end = 8.dp)) {
                                 Text(
                                     text = "Destination Folder",
                                     style = MaterialTheme.typography.bodyMedium,
@@ -322,12 +342,42 @@ fun SettingsScreen(
                                     color = MaterialTheme.colorScheme.primary
                                 )
                             }
-                            OutlinedButton(
-                                onClick = { folderPickerLauncher.launch(null) },
-                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Text("Change")
+                                OutlinedButton(
+                                    onClick = { folderPickerLauncher.launch(null) },
+                                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                                    enabled = !isMigratingPhotos
+                                ) {
+                                    Text("Change")
+                                }
+                                Button(
+                                    onClick = { moveFolderPickerLauncher.launch(null) },
+                                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                                    enabled = !isMigratingPhotos
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.DriveFileMove,
+                                        contentDescription = "Move Photos",
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text("Move")
+                                }
                             }
+                        }
+
+                        if (isMigratingPhotos) {
+                            Spacer(modifier = Modifier.height(8.dp))
+                            LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = "Moving photos and updating database timeline paths...",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.primary
+                            )
                         }
                     }
                 }
@@ -556,6 +606,88 @@ fun SettingsScreen(
             text = { Text(message) },
             confirmButton = {
                 Button(onClick = { viewModel.clearStatusMessage() }) {
+                    Text("OK")
+                }
+            }
+        )
+    }
+
+    // Confirmation dialog before moving all photos to a new folder
+    if (showMoveConfirmDialog && pendingMoveFolderUri != null && pendingMoveFolderName != null) {
+        AlertDialog(
+            onDismissRequest = {
+                showMoveConfirmDialog = false
+                pendingMoveFolderUri = null
+                pendingMoveFolderName = null
+            },
+            icon = {
+                Icon(
+                    imageVector = Icons.Default.DriveFileMove,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(32.dp)
+                )
+            },
+            title = {
+                Text("Move All Photos?", fontWeight = FontWeight.Bold)
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        text = "Move all existing vehicle photos to \"${pendingMoveFolderName}\"?",
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                    Text(
+                        text = "This will physically move all photos from the current folder to the new location and update all timeline photo links in your vehicle records.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        val uri = pendingMoveFolderUri!!
+                        val name = pendingMoveFolderName!!
+                        showMoveConfirmDialog = false
+                        pendingMoveFolderUri = null
+                        pendingMoveFolderName = null
+                        viewModel.moveAllPhotosToNewFolder(uri, name)
+                    }
+                ) {
+                    Text("Move Photos")
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        showMoveConfirmDialog = false
+                        pendingMoveFolderUri = null
+                        pendingMoveFolderName = null
+                    }
+                ) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+
+    // Result dialog for photo migration
+    migrationStatusMessage?.let { message ->
+        AlertDialog(
+            onDismissRequest = { viewModel.clearMigrationStatusMessage() },
+            icon = {
+                Icon(
+                    imageVector = Icons.Default.Info,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(32.dp)
+                )
+            },
+            title = { Text("Photo Relocation", fontWeight = FontWeight.Bold) },
+            text = { Text(message) },
+            confirmButton = {
+                Button(onClick = { viewModel.clearMigrationStatusMessage() }) {
                     Text("OK")
                 }
             }

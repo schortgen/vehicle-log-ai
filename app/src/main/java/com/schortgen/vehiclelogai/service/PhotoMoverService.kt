@@ -8,8 +8,14 @@ import android.os.Build
 import android.os.Environment
 import android.provider.MediaStore
 import androidx.documentfile.provider.DocumentFile
+import com.schortgen.vehiclelogai.data.local.VehicleLogDatabase
+import com.schortgen.vehiclelogai.data.models.Event
+import com.schortgen.vehiclelogai.data.models.ReviewItem
+import com.schortgen.vehiclelogai.data.models.ScannedPhoto
 import com.schortgen.vehiclelogai.data.repository.SettingsRepository
 import com.schortgen.vehiclelogai.debug.DiagnosticLogger
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.FileInputStream
 import java.io.FileOutputStream
@@ -17,6 +23,14 @@ import java.io.FileOutputStream
 data class PhotoMoveResult(
     val newPath: String,
     val pendingDeleteUri: Uri? = null
+)
+
+data class BulkFolderMigrationResult(
+    val movedCount: Int,
+    val totalFound: Int,
+    val newFolderName: String,
+    val success: Boolean,
+    val errorMessage: String? = null
 )
 
 class PhotoMoverService(
@@ -263,6 +277,212 @@ class PhotoMoverService(
             if (name.isNotBlank() && name.contains('.')) name else "photo_${System.currentTimeMillis()}.jpg"
         } catch (_: Exception) {
             "photo_${System.currentTimeMillis()}.jpg"
+        }
+    }
+
+    /**
+     * Moves all photos located in the currently configured folder and referenced in the database
+     * to a newly selected destination folder (SAF tree URI), and updates all timeline photo paths in Room DB.
+     */
+    suspend fun migrateAllPhotosToNewFolder(
+        newFolderTreeUri: Uri,
+        newFolderName: String,
+        database: VehicleLogDatabase
+    ): BulkFolderMigrationResult = withContext(Dispatchers.IO) {
+        try {
+            val targetDir = DocumentFile.fromTreeUri(context, newFolderTreeUri)
+            if (targetDir == null || !targetDir.exists() || !targetDir.canWrite()) {
+                return@withContext BulkFolderMigrationResult(
+                    movedCount = 0,
+                    totalFound = 0,
+                    newFolderName = newFolderName,
+                    success = false,
+                    errorMessage = "Cannot write to selected destination folder."
+                )
+            }
+
+            // 1. Gather current folder path / URI
+            val currentFolderUri = settingsRepository.getCompletedPhotosFolderUri()
+
+            // 2. Query all database records with photos
+            val allEvents = database.eventDao().getAllEvents()
+            val allReviewItems = database.reviewItemDao().getAll()
+            val allScannedPhotos = database.scannedPhotoDao().getAllScannedPhotos()
+
+            val dbPhotoPaths = mutableSetOf<String>()
+            allEvents.forEach { event ->
+                event.photoPath?.let { pathStr ->
+                    pathStr.split(",").map { it.trim() }.filter { it.isNotBlank() }.forEach { dbPhotoPaths.add(it) }
+                }
+            }
+            allReviewItems.forEach { item ->
+                item.photoPath?.let { p -> if (p.isNotBlank()) dbPhotoPaths.add(p) }
+            }
+            allScannedPhotos.forEach { photo ->
+                photo.photoUri?.let { u -> if (u.isNotBlank()) dbPhotoPaths.add(u) }
+            }
+
+            // 3. Gather all files from current source folder
+            val currentFolderFiles = mutableListOf<String>()
+            if (!currentFolderUri.isNullOrBlank() && currentFolderUri.startsWith("content://")) {
+                try {
+                    val sourceDir = DocumentFile.fromTreeUri(context, Uri.parse(currentFolderUri))
+                    sourceDir?.listFiles()?.forEach { file ->
+                        if (file.isFile) {
+                            currentFolderFiles.add(file.uri.toString())
+                        }
+                    }
+                } catch (e: Exception) {
+                    DiagnosticLogger.w("PhotoMover", "Error listing files from current SAF tree: ${e.message}")
+                }
+            }
+
+            // Also check default local storage folder
+            val basePicturesDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES)
+            val defaultLocalDir = File(basePicturesDir, "ProcessedVehiclePhotos")
+            if (defaultLocalDir.exists() && defaultLocalDir.isDirectory) {
+                defaultLocalDir.listFiles()?.forEach { f ->
+                    if (f.isFile) {
+                        currentFolderFiles.add(f.absolutePath)
+                    }
+                }
+            }
+
+            val appPicturesDir = context.getExternalFilesDir(Environment.DIRECTORY_PICTURES)
+            if (appPicturesDir != null && appPicturesDir.exists()) {
+                appPicturesDir.listFiles()?.forEach { f ->
+                    if (f.isFile) {
+                        currentFolderFiles.add(f.absolutePath)
+                    }
+                }
+            }
+
+            val allSourcesToProcess = (currentFolderFiles + dbPhotoPaths).distinct()
+            var movedCount = 0
+            val pathMap = mutableMapOf<String, String>()
+
+            for (sourcePath in allSourcesToProcess) {
+                val fileName = extractFileName(sourcePath)
+                if (!originalExists(sourcePath)) {
+                    DiagnosticLogger.d("PhotoMover", "Source photo not accessible on disk: $sourcePath")
+                    continue
+                }
+
+                try {
+                    val existingInTarget = targetDir.findFile(fileName)
+                    if (existingInTarget != null && existingInTarget.uri.toString() == sourcePath) {
+                        pathMap[sourcePath] = sourcePath
+                        continue
+                    }
+
+                    var destFile = existingInTarget
+                    if (destFile == null) {
+                        val mimeType = if (fileName.endsWith(".png", true)) "image/png" else "image/jpeg"
+                        destFile = targetDir.createFile(mimeType, fileName)
+                    }
+
+                    if (destFile != null) {
+                        val copySuccess = context.contentResolver.openOutputStream(destFile.uri)?.use { outStream ->
+                            openInputStream(sourcePath)?.use { inStream ->
+                                inStream.copyTo(outStream)
+                                true
+                            } ?: false
+                        } ?: false
+
+                        if (copySuccess) {
+                            val newUriString = destFile.uri.toString()
+                            pathMap[sourcePath] = newUriString
+                            val cleanPath = if (sourcePath.startsWith("file://")) sourcePath.removePrefix("file://") else sourcePath
+                            pathMap[cleanPath] = newUriString
+                            pathMap["file://$cleanPath"] = newUriString
+
+                            deleteOriginal(sourcePath)
+                            movedCount++
+                            DiagnosticLogger.i("PhotoMover", "Migrated $sourcePath -> $newUriString")
+                        }
+                    }
+                } catch (e: Exception) {
+                    DiagnosticLogger.e("PhotoMover", "Failed migrating $sourcePath", e)
+                }
+            }
+
+            // 4. Update all Event records in DB
+            val updatedEvents = mutableListOf<Event>()
+            for (event in allEvents) {
+                val rawPath = event.photoPath
+                if (!rawPath.isNullOrBlank()) {
+                    val parts = rawPath.split(",").map { it.trim() }.filter { it.isNotEmpty() }
+                    val updatedParts = parts.map { part ->
+                        pathMap[part]
+                            ?: pathMap[if (part.startsWith("file://")) part.removePrefix("file://") else "file://$part"]
+                            ?: pathMap.entries.firstOrNull { extractFileName(it.key) == extractFileName(part) }?.value
+                            ?: part
+                    }
+                    val newPhotoPath = updatedParts.joinToString(",")
+                    if (newPhotoPath != rawPath) {
+                        updatedEvents.add(event.copy(photoPath = newPhotoPath))
+                    }
+                }
+            }
+            if (updatedEvents.isNotEmpty()) {
+                database.eventDao().updateAll(updatedEvents)
+                DiagnosticLogger.i("PhotoMover", "Updated ${updatedEvents.size} Event records with new photo paths")
+            }
+
+            // 5. Update all ReviewItem records in DB
+            val updatedReviewItems = mutableListOf<ReviewItem>()
+            for (item in allReviewItems) {
+                val rawPath = item.photoPath
+                if (!rawPath.isNullOrBlank()) {
+                    val newP = pathMap[rawPath]
+                        ?: pathMap[if (rawPath.startsWith("file://")) rawPath.removePrefix("file://") else "file://$rawPath"]
+                        ?: pathMap.entries.firstOrNull { extractFileName(it.key) == extractFileName(rawPath) }?.value
+                    if (newP != null && newP != rawPath) {
+                        updatedReviewItems.add(item.copy(photoPath = newP))
+                    }
+                }
+            }
+            if (updatedReviewItems.isNotEmpty()) {
+                database.reviewItemDao().updateAll(updatedReviewItems)
+                DiagnosticLogger.i("PhotoMover", "Updated ${updatedReviewItems.size} ReviewItem records with new photo paths")
+            }
+
+            // 6. Update all ScannedPhoto records in DB
+            val updatedScannedPhotos = mutableListOf<ScannedPhoto>()
+            for (scanned in allScannedPhotos) {
+                val rawUri = scanned.photoUri
+                if (!rawUri.isNullOrBlank()) {
+                    val newU = pathMap[rawUri]
+                        ?: pathMap.entries.firstOrNull { extractFileName(it.key) == extractFileName(rawUri) }?.value
+                    if (newU != null && newU != rawUri) {
+                        updatedScannedPhotos.add(scanned.copy(photoUri = newU))
+                    }
+                }
+            }
+            if (updatedScannedPhotos.isNotEmpty()) {
+                database.scannedPhotoDao().updateAll(updatedScannedPhotos)
+                DiagnosticLogger.i("PhotoMover", "Updated ${updatedScannedPhotos.size} ScannedPhoto records with new photo paths")
+            }
+
+            // 7. Update Settings
+            settingsRepository.setCompletedPhotosFolder(newFolderTreeUri.toString(), newFolderName)
+            settingsRepository.setMovePhotosOnComplete(true)
+
+            BulkFolderMigrationResult(
+                movedCount = movedCount,
+                totalFound = allSourcesToProcess.size,
+                newFolderName = newFolderName,
+                success = true
+            )
+        } catch (e: Exception) {
+            DiagnosticLogger.e("PhotoMover", "Bulk migration error", e)
+            BulkFolderMigrationResult(
+                movedCount = 0,
+                totalFound = 0,
+                newFolderName = newFolderName,
+                success = false,
+                errorMessage = e.localizedMessage ?: "Unknown error during photo migration"
+            )
         }
     }
 }

@@ -5,9 +5,11 @@ import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import com.schortgen.vehiclelogai.data.local.VehicleLogDatabase
 import com.schortgen.vehiclelogai.data.repository.BackupRepository
 import com.schortgen.vehiclelogai.data.repository.PreferredTripMeter
 import com.schortgen.vehiclelogai.data.repository.SettingsRepository
+import com.schortgen.vehiclelogai.service.PhotoMoverService
 import com.schortgen.vehiclelogai.util.BackupFileItem
 import com.schortgen.vehiclelogai.util.BackupFileScanner
 import kotlinx.coroutines.Dispatchers
@@ -19,7 +21,9 @@ import kotlinx.coroutines.withContext
 
 class SettingsViewModel(
     private val settingsRepository: SettingsRepository,
-    private val backupRepository: BackupRepository
+    private val backupRepository: BackupRepository,
+    private val photoMoverService: PhotoMoverService? = null,
+    private val database: VehicleLogDatabase? = null
 ) : ViewModel() {
 
     val preferredTripMeter: StateFlow<PreferredTripMeter> = settingsRepository.preferredTripMeter
@@ -39,6 +43,37 @@ class SettingsViewModel(
 
     private val _isScanningBackups = MutableStateFlow(false)
     val isScanningBackups: StateFlow<Boolean> = _isScanningBackups.asStateFlow()
+
+    private val _isMigratingPhotos = MutableStateFlow(false)
+    val isMigratingPhotos: StateFlow<Boolean> = _isMigratingPhotos.asStateFlow()
+
+    private val _migrationStatusMessage = MutableStateFlow<String?>(null)
+    val migrationStatusMessage: StateFlow<String?> = _migrationStatusMessage.asStateFlow()
+
+    fun moveAllPhotosToNewFolder(newFolderTreeUri: Uri, newFolderName: String) {
+        val mover = photoMoverService
+        val db = database
+        if (mover == null || db == null) {
+            _migrationStatusMessage.value = "Photo migration service unavailable."
+            return
+        }
+
+        viewModelScope.launch {
+            _isMigratingPhotos.value = true
+            _migrationStatusMessage.value = null
+            val result = mover.migrateAllPhotosToNewFolder(newFolderTreeUri, newFolderName, db)
+            _isMigratingPhotos.value = false
+            if (result.success) {
+                _migrationStatusMessage.value = "Successfully moved ${result.movedCount} photo(s) to \"$newFolderName\". All timeline photo paths have been updated."
+            } else {
+                _migrationStatusMessage.value = "Failed to move photos: ${result.errorMessage ?: "Unknown error"}"
+            }
+        }
+    }
+
+    fun clearMigrationStatusMessage() {
+        _migrationStatusMessage.value = null
+    }
 
     fun scanForBackupFiles(context: Context) {
         viewModelScope.launch {
@@ -119,12 +154,14 @@ class SettingsViewModel(
 
 class SettingsViewModelFactory(
     private val settingsRepository: SettingsRepository,
-    private val backupRepository: BackupRepository
+    private val backupRepository: BackupRepository,
+    private val photoMoverService: PhotoMoverService? = null,
+    private val database: VehicleLogDatabase? = null
 ) : ViewModelProvider.Factory {
     @Suppress("UNCHECKED_CAST")
     override fun <T : ViewModel> create(modelClass: Class<T>): T {
         if (modelClass.isAssignableFrom(SettingsViewModel::class.java)) {
-            return SettingsViewModel(settingsRepository, backupRepository) as T
+            return SettingsViewModel(settingsRepository, backupRepository, photoMoverService, database) as T
         }
         throw IllegalArgumentException("Unknown ViewModel class")
     }
