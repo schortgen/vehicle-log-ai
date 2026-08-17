@@ -231,6 +231,24 @@ export const EventsTimelineView: React.FC<EventsTimelineViewProps> = ({
                         {evt.notes}
                       </p>
                     )}
+
+                    {evt.photoPath && (
+                      <div className="flex items-center gap-2 pt-1 overflow-x-auto">
+                        {evt.photoPath.split(',').map((p, idx) => {
+                          const cleanPath = p.trim();
+                          if (!cleanPath) return null;
+                          return (
+                            <img
+                              key={idx}
+                              src={cleanPath}
+                              alt="Event attachment"
+                              referrerPolicy="no-referrer"
+                              className="w-10 h-10 rounded-lg object-cover border border-slate-700 bg-slate-800 shrink-0"
+                            />
+                          );
+                        })}
+                      </div>
+                    )}
                   </div>
                 </div>
 

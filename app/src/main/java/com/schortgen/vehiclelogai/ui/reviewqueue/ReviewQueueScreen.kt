@@ -15,7 +15,8 @@ import com.schortgen.vehiclelogai.data.models.Event
 import com.schortgen.vehiclelogai.data.models.EventType
 import com.schortgen.vehiclelogai.data.models.ProcessingStatus
 import com.schortgen.vehiclelogai.data.models.ReviewItem
-import com.schortgen.vehiclelogai.data.models.getPhotoPaths
+import androidx.compose.foundation.lazy.LazyRow
+import com.schortgen.vehiclelogai.data.models.toImageModel
 import com.schortgen.vehiclelogai.navigation.Screen
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -256,71 +257,91 @@ private fun GroupedEventCard(
     onClick: () -> Unit,
     onDelete: () -> Unit
 ) {
+    val allPhotos = remember(event, items) {
+        val list = mutableListOf<String>()
+        items.forEach { item ->
+            val p = item.photoPath
+            if (!p.isNullOrBlank() && !list.contains(p.trim())) {
+                list.add(p.trim())
+            }
+        }
+        event.getPhotoPaths().forEach { p ->
+            val trimmed = p.trim()
+            if (trimmed.isNotBlank() && !list.contains(trimmed)) {
+                list.add(trimmed)
+            }
+        }
+        list
+    }
+
     Card(
         onClick = onClick,
         modifier = Modifier.fillMaxWidth()
     ) {
-        Row(
+        Column(
             modifier = Modifier
                 .padding(16.dp)
-                .fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-            verticalAlignment = Alignment.CenterVertically
+                .fillMaxWidth()
         ) {
-            // Thumbnail container showing stack or representative photo
-            Surface(
-                modifier = Modifier.size(96.dp),
-                shape = MaterialTheme.shapes.medium,
-                color = MaterialTheme.colorScheme.surfaceVariant
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                val repPhoto = event.getPhotoPaths().firstOrNull() ?: items.firstOrNull()?.photoPath
-                if (repPhoto != null) {
-                    AsyncImage(
-                        model = repPhoto,
-                        contentDescription = "Event Thumbnail",
-                        placeholder = painterResource(id = android.R.drawable.ic_menu_report_image),
-                        error = painterResource(id = android.R.drawable.ic_dialog_alert),
-                        modifier = Modifier.fillMaxSize(),
-                        contentScale = ContentScale.Crop
+                // Info
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "Grouped Event (${allPhotos.size.coerceAtLeast(items.size)} photos)",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
                     )
-                } else {
-                    Box(contentAlignment = Alignment.Center) {
-                        Text(
-                            text = "📚",
-                            style = MaterialTheme.typography.headlineLarge
-                        )
+                    Spacer(modifier = Modifier.height(2.dp))
+                    val typeName = when (event.eventType) {
+                        EventType.FUEL -> "⛽ Fuel Purchase"
+                        else -> "🔧 Maintenance/Service"
+                    }
+                    Text(
+                        text = typeName,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        text = dateFormat.format(Date(event.eventDate)),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+
+                // Delete action
+                IconButton(onClick = onDelete) {
+                    Text("🗑️", style = MaterialTheme.typography.titleMedium)
+                }
+            }
+
+            if (allPhotos.isNotEmpty()) {
+                Spacer(modifier = Modifier.height(12.dp))
+                LazyRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    items(allPhotos) { photoPath ->
+                        Surface(
+                            modifier = Modifier.size(80.dp),
+                            shape = MaterialTheme.shapes.medium,
+                            color = MaterialTheme.colorScheme.surfaceVariant
+                        ) {
+                            AsyncImage(
+                                model = photoPath.toImageModel(),
+                                contentDescription = "Grouped Photo",
+                                placeholder = painterResource(id = android.R.drawable.ic_menu_report_image),
+                                error = painterResource(id = android.R.drawable.ic_dialog_alert),
+                                modifier = Modifier.fillMaxSize(),
+                                contentScale = ContentScale.Crop
+                            )
+                        }
                     }
                 }
-            }
-
-            // Info
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = "Grouped Event (${items.size} photos)",
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.Bold
-                )
-                Spacer(modifier = Modifier.height(2.dp))
-                val typeName = when (event.eventType) {
-                    EventType.FUEL -> "⛽ Fuel Purchase"
-                    else -> "🔧 Maintenance/Service"
-                }
-                Text(
-                    text = typeName,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.primary
-                )
-                Spacer(modifier = Modifier.height(2.dp))
-                Text(
-                    text = dateFormat.format(Date(event.eventDate)),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-
-            // Delete action
-            IconButton(onClick = onDelete) {
-                Text("🗑️", style = MaterialTheme.typography.titleMedium)
             }
         }
     }
