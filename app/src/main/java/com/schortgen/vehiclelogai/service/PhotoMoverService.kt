@@ -69,7 +69,8 @@ class PhotoMoverService(
                 if (targetDir != null && targetDir.exists() && targetDir.canWrite()) {
                     var destFile = targetDir.findFile(fileName)
                     if (destFile == null) {
-                        destFile = targetDir.createFile("image/jpeg", fileName)
+                        val mimeType = getMimeType(fileName, photoPath)
+                        destFile = targetDir.createFile(mimeType, fileName)
                     }
                     if (destFile != null) {
                         if (destFile.uri.toString() == photoPath) {
@@ -272,11 +273,71 @@ class PhotoMoverService(
 
     private fun extractFileName(photoPath: String): String {
         return try {
+            if (photoPath.startsWith("content://")) {
+                val uri = Uri.parse(photoPath)
+                var displayName: String? = null
+                try {
+                    context.contentResolver.query(
+                        uri,
+                        arrayOf(android.provider.OpenableColumns.DISPLAY_NAME),
+                        null,
+                        null,
+                        null
+                    )?.use { cursor ->
+                        if (cursor.moveToFirst()) {
+                            val nameIndex = cursor.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
+                            if (nameIndex != -1) {
+                                displayName = cursor.getString(nameIndex)
+                            }
+                        }
+                    }
+                } catch (_: Exception) {}
+                if (!displayName.isNullOrBlank()) {
+                    return displayName!!.trim()
+                }
+            }
             val decoded = Uri.decode(photoPath)
             val name = decoded.substringAfterLast('/').substringAfterLast('\\').trim()
-            if (name.isNotBlank() && name.contains('.')) name else "photo_${System.currentTimeMillis()}.jpg"
+            if (name.isNotBlank()) {
+                if (name.contains('.')) name else "photo_${System.currentTimeMillis()}.jpg"
+            } else {
+                "photo_${System.currentTimeMillis()}.jpg"
+            }
         } catch (_: Exception) {
             "photo_${System.currentTimeMillis()}.jpg"
+        }
+    }
+
+    private fun getMimeType(fileName: String, uriString: String? = null): String {
+        val cleanName = fileName.trim()
+        val ext = if (cleanName.contains('.')) cleanName.substringAfterLast('.').lowercase() else ""
+
+        // Explicitly map extensions to avoid Android SAF auto-appending unwanted extensions
+        return when (ext) {
+            "json" -> "application/json"
+            "png" -> "image/png"
+            "jpg", "jpeg" -> "image/jpeg"
+            "webp" -> "image/webp"
+            "gif" -> "image/gif"
+            "heic", "heif" -> "image/heif"
+            "pdf" -> "application/pdf"
+            "txt" -> "text/plain"
+            "xml" -> "application/xml"
+            "csv" -> "text/csv"
+            else -> {
+                if (!uriString.isNullOrBlank() && uriString.startsWith("content://")) {
+                    try {
+                        val type = context.contentResolver.getType(Uri.parse(uriString))
+                        if (!type.isNullOrBlank() && type != "application/octet-stream") {
+                            return type
+                        }
+                    } catch (_: Exception) {}
+                }
+                val mapType = if (ext.isNotBlank()) {
+                    android.webkit.MimeTypeMap.getSingleton().getMimeTypeFromExtension(ext)
+                } else null
+                mapType ?: "application/octet-stream"
+            }
         }
     }
 
@@ -377,7 +438,7 @@ class PhotoMoverService(
 
                     var destFile = existingInTarget
                     if (destFile == null) {
-                        val mimeType = if (fileName.endsWith(".png", true)) "image/png" else "image/jpeg"
+                        val mimeType = getMimeType(fileName, sourcePath)
                         destFile = targetDir.createFile(mimeType, fileName)
                     }
 

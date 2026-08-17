@@ -55,11 +55,6 @@ class BackupRepository(
 
     suspend fun importBackup(context: Context, uri: Uri, clearExisting: Boolean = true): Result<BackupData> = withContext(Dispatchers.IO) {
         try {
-            val mimeType = runCatching { context.contentResolver.getType(uri) }.getOrNull()
-            if (mimeType?.startsWith("image/") == true) {
-                return@withContext Result.failure(Exception("Selected file is an image. Please select a valid JSON backup file."))
-            }
-
             val jsonString: String = runCatching {
                 context.contentResolver.openInputStream(uri)?.use { inputStream ->
                     inputStream.bufferedReader(Charsets.UTF_8).readText()
@@ -75,6 +70,10 @@ class BackupRepository(
             val backupData = try {
                 gson.fromJson(jsonString, BackupData::class.java)
             } catch (e: Exception) {
+                val mimeType = runCatching { context.contentResolver.getType(uri) }.getOrNull()
+                if (mimeType?.startsWith("image/") == true) {
+                    return@withContext Result.failure(Exception("Selected file is an image. Please select a valid JSON backup file."))
+                }
                 return@withContext Result.failure(Exception("Invalid backup JSON format: ${e.message}"))
             }
 

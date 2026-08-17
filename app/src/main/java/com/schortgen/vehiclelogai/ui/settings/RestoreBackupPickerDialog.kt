@@ -94,7 +94,7 @@ fun RestoreBackupPickerDialog(
 
             if (f.isDirectory) {
                 val subFiles = f.listFiles() ?: emptyArray()
-                val jsonCount = subFiles.count { it.name.endsWith(".json", ignoreCase = true) }
+                val jsonCount = subFiles.count { BackupFileScanner.checkIfJson(it.name) }
                 nodes.add(
                     FolderNode(
                         name = f.name,
@@ -112,7 +112,7 @@ fun RestoreBackupPickerDialog(
                     path = f.absolutePath,
                     formattedSize = BackupFileScanner.formatFileSize(f.length()),
                     formattedDate = BackupFileScanner.formatDate(f.lastModified()),
-                    isJson = f.name.endsWith(".json", ignoreCase = true)
+                    isJson = BackupFileScanner.checkIfJson(f.name)
                 )
                 nodes.add(
                     FolderNode(

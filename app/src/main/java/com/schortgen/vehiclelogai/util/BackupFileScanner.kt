@@ -35,6 +35,13 @@ object BackupFileScanner {
 
     private val dateFormat = SimpleDateFormat("MMM dd, yyyy HH:mm", Locale.getDefault())
 
+    fun checkIfJson(name: String, mimeType: String? = null): Boolean {
+        return name.endsWith(".json", ignoreCase = true) ||
+               name.endsWith(".json.jpg", ignoreCase = true) ||
+               name.contains(".json.", ignoreCase = true) ||
+               mimeType == "application/json"
+    }
+
     fun formatFileSize(bytes: Long): String {
         if (bytes <= 0) return "0 B"
         val kb = bytes / 1024.0
@@ -86,7 +93,7 @@ object BackupFileScanner {
                     val dateSec = cursor.getLong(dateCol)
                     val dateMs = dateSec * 1000L
                     val contentUri = ContentUris.withAppendedId(externalUri, id)
-                    val isJson = name.endsWith(".json", ignoreCase = true)
+                    val isJson = checkIfJson(name)
                     val key = contentUri.toString()
                     if (!foundItems.containsKey(key)) {
                         foundItems[key] = BackupFileItem(
@@ -132,7 +139,7 @@ object BackupFileScanner {
                         val dateSec = cursor.getLong(dateCol)
                         val dateMs = dateSec * 1000L
                         val contentUri = ContentUris.withAppendedId(MediaStore.Downloads.EXTERNAL_CONTENT_URI, id)
-                        val isJson = name.endsWith(".json", ignoreCase = true)
+                        val isJson = checkIfJson(name)
                         val key = contentUri.toString()
                         if (!foundItems.containsKey(key)) {
                             foundItems[key] = BackupFileItem(
@@ -215,7 +222,7 @@ object BackupFileScanner {
                             path = folder.absolutePath,
                             formattedSize = formatFileSize(folder.length()),
                             formattedDate = formatDate(folder.lastModified()),
-                            isJson = folder.name.endsWith(".json", ignoreCase = true)
+                            isJson = checkIfJson(folder.name)
                         )
                         foundItems[folder.absolutePath] = item
                     }
@@ -264,7 +271,7 @@ object BackupFileScanner {
                     path = file.absolutePath,
                     formattedSize = formatFileSize(file.length()),
                     formattedDate = formatDate(file.lastModified()),
-                    isJson = file.name.endsWith(".json", ignoreCase = true)
+                    isJson = checkIfJson(file.name)
                 )
                 results[file.absolutePath] = item
             }
@@ -295,7 +302,7 @@ object BackupFileScanner {
                         path = name,
                         formattedSize = formatFileSize(size),
                         formattedDate = formatDate(dateMs),
-                        isJson = name.endsWith(".json", ignoreCase = true) || child.type == "application/json"
+                        isJson = checkIfJson(name, child.type)
                     )
                 )
             }
