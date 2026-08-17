@@ -17,6 +17,7 @@ import com.schortgen.vehiclelogai.data.models.ProcessingStatus
 import com.schortgen.vehiclelogai.data.models.ReviewItem
 import com.schortgen.vehiclelogai.data.models.getPhotoPaths
 import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.ui.platform.LocalContext
 import com.schortgen.vehiclelogai.data.models.toImageModel
 import com.schortgen.vehiclelogai.navigation.Screen
 import java.text.SimpleDateFormat
