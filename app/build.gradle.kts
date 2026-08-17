@@ -8,12 +8,18 @@ android {
     namespace = "com.schortgen.vehiclelogai"
     compileSdk = 34
 
+    val buildNumber = System.getenv("GITHUB_RUN_NUMBER") ?: "Local"
+    val gitSha = (System.getenv("GITHUB_SHA") ?: "dev").take(7)
+
     defaultConfig {
         applicationId = "com.schortgen.vehiclelogai"
         minSdk = 29
         targetSdk = 34
         versionCode = 1
         versionName = "1.0"
+
+        buildConfigField("String", "BUILD_NUMBER", "\"$buildNumber\"")
+        buildConfigField("String", "GIT_COMMIT", "\"$gitSha\"")
     }
 
     buildFeatures {

@@ -88,7 +88,9 @@ fun DebugScreen(navController: NavController) {
                 appVersion = BuildConfig.VERSION_NAME,
                 versionCode = BuildConfig.VERSION_CODE,
                 dbSchemaVersion = 6,
-                debugBuild = BuildConfig.DEBUG
+                debugBuild = BuildConfig.DEBUG,
+                buildNumber = BuildConfig.BUILD_NUMBER,
+                gitCommit = BuildConfig.GIT_COMMIT
             )
         )
         viewModel.refresh()
@@ -160,6 +162,8 @@ private fun BuildInfoCard(build: BuildInfo) {
         Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text("Build", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
             InfoRow("App version", "${build.appVersion} (${build.versionCode})")
+            InfoRow("Build number", if (build.buildNumber.all { it.isDigit() }) "#${build.buildNumber}" else build.buildNumber)
+            InfoRow("Commit", build.gitCommit)
             InfoRow("DB schema", build.dbSchemaVersion.toString())
             InfoRow("Build type", if (build.debugBuild) "Debug" else "Release")
         }

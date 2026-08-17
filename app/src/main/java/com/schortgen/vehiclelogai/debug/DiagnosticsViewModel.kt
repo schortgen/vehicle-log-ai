@@ -33,7 +33,9 @@ data class BuildInfo(
     val appVersion: String,
     val versionCode: Int,
     val dbSchemaVersion: Int,
-    val debugBuild: Boolean
+    val debugBuild: Boolean,
+    val buildNumber: String = "Local",
+    val gitCommit: String = "dev"
 )
 
 data class DiagnosticsUiState(
