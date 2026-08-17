@@ -1,10 +1,15 @@
 package com.schortgen.vehiclelogai.data.models
 
+import android.content.Context
+import android.net.Uri
+import android.os.Environment
+import androidx.documentfile.provider.DocumentFile
 import androidx.room.Entity
 import androidx.room.ForeignKey
 import androidx.room.Index
 import androidx.room.PrimaryKey
 import com.schortgen.vehiclelogai.data.models.Vehicle
+import java.io.File
 
 @Entity(
     tableName = "events",
@@ -65,22 +70,104 @@ fun Event.calculateMpg(allEvents: List<Event> = emptyList()): Double? {
 
 fun Event.getPhotoPaths(): List<String> {
     if (photoPath.isNullOrBlank()) return emptyList()
-    return photoPath.split(',', '|', '\n', ';')
+    val clean = photoPath.trim().removePrefix("[").removeSuffix("]").replace("\"", "").replace("'", "")
+    return clean.split(',', '|', '\n', ';')
         .map { it.trim() }
         .filter { it.isNotBlank() }
         .distinct()
 }
 
-fun String.toImageModel(): Any {
+fun String.toImageModel(context: Context? = null): Any {
     val trimmed = this.trim()
+    if (trimmed.isEmpty()) return ""
+
+    // 1. Web URLs
+    if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) {
+        return trimmed
+    }
+
+    // 2. Direct Content URI
+    if (trimmed.startsWith("content://")) {
+        val uri = try { Uri.parse(trimmed) } catch (_: Exception) { null }
+        if (uri != null) {
+            if (context != null) {
+                val canRead = try {
+                    context.contentResolver.openInputStream(uri)?.use { true } ?: false
+                } catch (_: Exception) {
+                    false
+                }
+                if (canRead) {
+                    return uri
+                }
+            } else {
+                return uri
+            }
+        }
+    }
+
+    // 3. Direct File / file:// URI
+    val cleanPath = if (trimmed.startsWith("file://")) trimmed.removePrefix("file://") else trimmed
+    val directFile = File(cleanPath)
+    if (directFile.exists() && directFile.canRead()) {
+        return directFile
+    }
+
+    // 4. Smart fallback for restored backups / migrated photos:
+    // Extract filename and check common photo storage directories
+    val fileName = try {
+        val decoded = Uri.decode(trimmed)
+        decoded.substringAfterLast('/').substringAfterLast('\\').trim()
+    } catch (_: Exception) {
+        trimmed.substringAfterLast('/').substringAfterLast('\\').trim()
+    }
+
+    if (fileName.isNotEmpty() && context != null) {
+        val basePicturesDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES)
+        val candidateDirs = listOfNotNull(
+            File(basePicturesDir, "ProcessedVehiclePhotos"),
+            context.getExternalFilesDir(Environment.DIRECTORY_PICTURES),
+            basePicturesDir,
+            Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DCIM),
+            File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DCIM), "Camera"),
+            Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS),
+            context.filesDir,
+            context.cacheDir
+        )
+
+        for (dir in candidateDirs) {
+            if (dir.exists()) {
+                val candidateFile = File(dir, fileName)
+                if (candidateFile.exists() && candidateFile.canRead()) {
+                    return candidateFile
+                }
+            }
+        }
+
+        // Check user-configured SAF completed photos folder if any
+        try {
+            val app = context.applicationContext as? com.schortgen.vehiclelogai.VehicleLogAIApplication
+            val folderUriStr = app?.settingsRepository?.getCompletedPhotosFolderUri()
+            if (!folderUriStr.isNullOrBlank() && folderUriStr.startsWith("content://")) {
+                val treeUri = Uri.parse(folderUriStr)
+                val targetDir = DocumentFile.fromTreeUri(context, treeUri)
+                val found = targetDir?.findFile(fileName)
+                if (found != null && found.exists()) {
+                    return found.uri
+                }
+            }
+        } catch (_: Exception) {}
+    }
+
+    // Fallback parsing
     return when {
-        trimmed.startsWith("content://") -> android.net.Uri.parse(trimmed)
-        trimmed.startsWith("file://") -> android.net.Uri.parse(trimmed)
-        trimmed.startsWith("/") -> java.io.File(trimmed)
+        trimmed.startsWith("content://") -> Uri.parse(trimmed)
+        trimmed.startsWith("file://") -> Uri.parse(trimmed)
+        trimmed.startsWith("/") -> File(trimmed)
         else -> {
-            val file = java.io.File(trimmed)
-            if (file.exists() || trimmed.contains("/")) file else android.net.Uri.parse(trimmed)
+            val file = File(cleanPath)
+            if (file.exists() || cleanPath.contains("/")) file else Uri.parse(trimmed)
         }
     }
 }
+
 

@@ -389,14 +389,20 @@ private fun TimelineEventCard(
                     val list = mutableListOf<String>()
                     reviewItems.filter { it.eventId == event.id }.forEach { item ->
                         val path = item.photoPath
-                        if (!path.isNullOrBlank() && !list.contains(path.trim())) {
-                            list.add(path.trim())
+                        if (!path.isNullOrBlank()) {
+                            val clean = path.trim().removePrefix("[").removeSuffix("]").replace("\"", "").replace("'", "")
+                            clean.split(',', '|', '\n', ';').map { it.trim() }.filter { it.isNotBlank() }.forEach { p ->
+                                if (!list.contains(p)) list.add(p)
+                            }
                         }
                     }
                     scannedPhotos.filter { it.eventId == event.id }.forEach { sp ->
                         val uri = sp.uri
-                        if (uri.isNotBlank() && !list.contains(uri.trim())) {
-                            list.add(uri.trim())
+                        if (uri.isNotBlank()) {
+                            val clean = uri.trim().removePrefix("[").removeSuffix("]").replace("\"", "").replace("'", "")
+                            clean.split(',', '|', '\n', ';').map { it.trim() }.filter { it.isNotBlank() }.forEach { u ->
+                                if (!list.contains(u)) list.add(u)
+                            }
                         }
                     }
                     event.getPhotoPaths().forEach { sp ->
@@ -408,14 +414,15 @@ private fun TimelineEventCard(
                     list
                 }
                 if (photoPaths.isNotEmpty()) {
+                    val currentCtx = LocalContext.current
                     Spacer(modifier = Modifier.height(8.dp))
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
                         photoPaths.take(4).forEach { path ->
-                            val model = ImageRequest.Builder(LocalContext.current)
-                                .data(path.toImageModel())
+                            val model = ImageRequest.Builder(currentCtx)
+                                .data(path.toImageModel(currentCtx))
                                 .crossfade(true)
                                 .build()
                             Box(

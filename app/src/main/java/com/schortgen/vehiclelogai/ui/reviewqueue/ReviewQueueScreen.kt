@@ -152,8 +152,9 @@ private fun ReviewQueueCard(
                 color = MaterialTheme.colorScheme.surfaceVariant
             ) {
                 if (item.photoPath != null) {
+                    val currentCtx = LocalContext.current
                     AsyncImage(
-                        model = item.photoPath,
+                        model = item.photoPath.toImageModel(currentCtx),
                         contentDescription = "Receipt Thumbnail",
                         placeholder = painterResource(id = android.R.drawable.ic_menu_report_image),
                         error = painterResource(id = android.R.drawable.ic_dialog_alert),
@@ -327,13 +328,14 @@ private fun GroupedEventCard(
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     items(allPhotos) { photoPath ->
+                        val currentCtx = LocalContext.current
                         Surface(
                             modifier = Modifier.size(80.dp),
                             shape = MaterialTheme.shapes.medium,
                             color = MaterialTheme.colorScheme.surfaceVariant
                         ) {
                             AsyncImage(
-                                model = photoPath.toImageModel(),
+                                model = photoPath.toImageModel(currentCtx),
                                 contentDescription = "Grouped Photo",
                                 placeholder = painterResource(id = android.R.drawable.ic_menu_report_image),
                                 error = painterResource(id = android.R.drawable.ic_dialog_alert),

@@ -69,14 +69,20 @@ fun EventDetailScreen(
         val list = mutableListOf<String>()
         reviewItems.forEach { item ->
             val path = item.photoPath
-            if (!path.isNullOrBlank() && !list.contains(path.trim())) {
-                list.add(path.trim())
+            if (!path.isNullOrBlank()) {
+                val clean = path.trim().removePrefix("[").removeSuffix("]").replace("\"", "").replace("'", "")
+                clean.split(',', '|', '\n', ';').map { it.trim() }.filter { it.isNotBlank() }.forEach { p ->
+                    if (!list.contains(p)) list.add(p)
+                }
             }
         }
         scannedPhotos.forEach { sp ->
             val uri = sp.uri
-            if (uri.isNotBlank() && !list.contains(uri.trim())) {
-                list.add(uri.trim())
+            if (uri.isNotBlank()) {
+                val clean = uri.trim().removePrefix("[").removeSuffix("]").replace("\"", "").replace("'", "")
+                clean.split(',', '|', '\n', ';').map { it.trim() }.filter { it.isNotBlank() }.forEach { u ->
+                    if (!list.contains(u)) list.add(u)
+                }
             }
         }
         event?.getPhotoPaths()?.forEach { sp ->
@@ -446,7 +452,7 @@ fun EventDetailScreen(
                                 if (photoPaths.size == 1) {
                                     val path = photoPaths.first()
                                     val model = ImageRequest.Builder(context)
-                                        .data(path.toImageModel())
+                                        .data(path.toImageModel(context))
                                         .crossfade(true)
                                         .build()
 
@@ -475,7 +481,7 @@ fun EventDetailScreen(
                                     ) {
                                         itemsIndexed(photoPaths) { index, path ->
                                             val model = ImageRequest.Builder(context)
-                                                .data(path.toImageModel())
+                                                .data(path.toImageModel(context))
                                                 .crossfade(true)
                                                 .build()
 
@@ -592,7 +598,7 @@ fun EventDetailScreen(
             val safeIndex = selectedPhotoIndex.coerceIn(0, photoPaths.lastIndex)
             val photoPath = photoPaths[safeIndex]
             val model = ImageRequest.Builder(context)
-                .data(photoPath.toImageModel())
+                .data(photoPath.toImageModel(context))
                 .build()
 
             Dialog(
