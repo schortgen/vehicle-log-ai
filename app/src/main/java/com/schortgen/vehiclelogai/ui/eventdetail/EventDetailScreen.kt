@@ -20,6 +20,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -34,6 +35,7 @@ import com.schortgen.vehiclelogai.data.models.EventType
 import com.schortgen.vehiclelogai.data.models.calculateMpg
 import com.schortgen.vehiclelogai.data.models.getPhotoPaths
 import com.schortgen.vehiclelogai.data.models.toImageModel
+import com.schortgen.vehiclelogai.debug.DiagnosticLogger
 import com.schortgen.vehiclelogai.ui.events.EventViewModel
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
@@ -454,22 +456,30 @@ fun EventDetailScreen(
                                     val model = ImageRequest.Builder(context)
                                         .data(path.toImageModel(context))
                                         .crossfade(true)
+                                        .listener(
+                                            onError = { _, result ->
+                                                DiagnosticLogger.w("EventDetailImage", "Failed to load single photo '$path': ${result.throwable.message}")
+                                            }
+                                        )
                                         .build()
 
-                                    Box(
+                                    Surface(
                                         modifier = Modifier
                                             .fillMaxWidth()
-                                            .height(180.dp)
+                                            .height(200.dp)
                                             .clip(RoundedCornerShape(8.dp))
                                             .clickable {
                                                 selectedPhotoIndex = 0
                                                 showImageDialog = true
                                             },
-                                        contentAlignment = Alignment.Center
+                                        color = MaterialTheme.colorScheme.surfaceVariant,
+                                        shape = RoundedCornerShape(8.dp)
                                     ) {
                                         AsyncImage(
                                             model = model,
                                             contentDescription = "Event photo",
+                                            placeholder = painterResource(id = android.R.drawable.ic_menu_report_image),
+                                            error = painterResource(id = android.R.drawable.ic_dialog_alert),
                                             contentScale = ContentScale.Crop,
                                             modifier = Modifier.fillMaxSize()
                                         )
@@ -483,9 +493,14 @@ fun EventDetailScreen(
                                             val model = ImageRequest.Builder(context)
                                                 .data(path.toImageModel(context))
                                                 .crossfade(true)
+                                                .listener(
+                                                    onError = { _, result ->
+                                                        DiagnosticLogger.w("EventDetailImage", "Failed to load photo [$index] '$path': ${result.throwable.message}")
+                                                    }
+                                                )
                                                 .build()
 
-                                            Box(
+                                            Surface(
                                                 modifier = Modifier
                                                     .size(140.dp)
                                                     .clip(RoundedCornerShape(8.dp))
@@ -493,11 +508,14 @@ fun EventDetailScreen(
                                                         selectedPhotoIndex = index
                                                         showImageDialog = true
                                                     },
-                                                contentAlignment = Alignment.Center
+                                                color = MaterialTheme.colorScheme.surfaceVariant,
+                                                shape = RoundedCornerShape(8.dp)
                                             ) {
                                                 AsyncImage(
                                                     model = model,
                                                     contentDescription = "Event photo ${index + 1}",
+                                                    placeholder = painterResource(id = android.R.drawable.ic_menu_report_image),
+                                                    error = painterResource(id = android.R.drawable.ic_dialog_alert),
                                                     contentScale = ContentScale.Crop,
                                                     modifier = Modifier.fillMaxSize()
                                                 )
@@ -599,6 +617,12 @@ fun EventDetailScreen(
             val photoPath = photoPaths[safeIndex]
             val model = ImageRequest.Builder(context)
                 .data(photoPath.toImageModel(context))
+                .crossfade(true)
+                .listener(
+                    onError = { _, result ->
+                        DiagnosticLogger.w("EventDetailImage", "Failed to load full size photo [$safeIndex] '$photoPath': ${result.throwable.message}")
+                    }
+                )
                 .build()
 
             Dialog(
@@ -618,6 +642,8 @@ fun EventDetailScreen(
                         AsyncImage(
                             model = model,
                             contentDescription = "Full Size Event Photo ${safeIndex + 1}",
+                            placeholder = painterResource(id = android.R.drawable.ic_menu_report_image),
+                            error = painterResource(id = android.R.drawable.ic_dialog_alert),
                             contentScale = ContentScale.Fit,
                             modifier = Modifier
                                 .fillMaxSize()

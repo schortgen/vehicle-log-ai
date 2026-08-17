@@ -112,13 +112,14 @@ fun String.toImageModel(context: Context? = null): Any {
         return directFile
     }
 
-    // 4. Smart fallback for restored backups / migrated photos:
-    // Extract filename and check common photo storage directories
+    // 4. Smart fallback for restored backups / migrated photos / SAF tree references:
+    // Extract filename (handling URL decoding, query params, etc.) and check photo storage directories & MediaStore
+    val rawClean = trimmed.removePrefix("file://")
     val fileName = try {
-        val decoded = Uri.decode(trimmed)
-        decoded.substringAfterLast('/').substringAfterLast('\\').trim()
+        val decoded = Uri.decode(rawClean)
+        decoded.substringAfterLast('/').substringAfterLast('\\').substringBefore('?').trim()
     } catch (_: Exception) {
-        trimmed.substringAfterLast('/').substringAfterLast('\\').trim()
+        rawClean.substringAfterLast('/').substringAfterLast('\\').substringBefore('?').trim()
     }
 
     if (fileName.isNotEmpty() && context != null) {
@@ -126,12 +127,14 @@ fun String.toImageModel(context: Context? = null): Any {
         val candidateDirs = listOfNotNull(
             File(basePicturesDir, "ProcessedVehiclePhotos"),
             context.getExternalFilesDir(Environment.DIRECTORY_PICTURES),
+            context.getExternalFilesDir(null),
             basePicturesDir,
             Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DCIM),
             File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DCIM), "Camera"),
             Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS),
             context.filesDir,
-            context.cacheDir
+            context.cacheDir,
+            context.externalCacheDir
         )
 
         for (dir in candidateDirs) {
@@ -153,6 +156,37 @@ fun String.toImageModel(context: Context? = null): Any {
                 val found = targetDir?.findFile(fileName)
                 if (found != null && found.exists()) {
                     return found.uri
+                }
+            }
+        } catch (_: Exception) {}
+
+        // Query MediaStore by DISPLAY_NAME as a fallback in case the photo is in media storage under a content URI
+        try {
+            val projection = arrayOf(android.provider.MediaStore.Images.Media._ID)
+            val selection = "${android.provider.MediaStore.Images.Media.DISPLAY_NAME} = ?"
+            val selectionArgs = arrayOf(fileName)
+            context.contentResolver.query(
+                android.provider.MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
+                projection,
+                selection,
+                selectionArgs,
+                null
+            )?.use { cursor ->
+                if (cursor.moveToFirst()) {
+                    val idColumn = cursor.getColumnIndexOrThrow(android.provider.MediaStore.Images.Media._ID)
+                    val id = cursor.getLong(idColumn)
+                    val contentUri = android.content.ContentUris.withAppendedId(
+                        android.provider.MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
+                        id
+                    )
+                    val canRead = try {
+                        context.contentResolver.openInputStream(contentUri)?.use { true } ?: false
+                    } catch (_: Exception) {
+                        false
+                    }
+                    if (canRead) {
+                        return contentUri
+                    }
                 }
             }
         } catch (_: Exception) {}
