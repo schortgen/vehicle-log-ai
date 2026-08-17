@@ -51,6 +51,14 @@ fun RestoreBackupPickerDialog(
     }
     var currentFolder by remember { mutableStateOf(rootDir) }
 
+    val filePickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument()
+    ) { uri: Uri? ->
+        if (uri != null) {
+            onSelectFile(uri)
+        }
+    }
+
     val folderPickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocumentTree()
     ) { uri ->
@@ -190,13 +198,23 @@ fun RestoreBackupPickerDialog(
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     FilledTonalButton(
-                        onClick = onBrowseSystemPicker,
+                        onClick = {
+                            filePickerLauncher.launch(
+                                arrayOf(
+                                    "*/*",
+                                    "application/json",
+                                    "text/json",
+                                    "text/plain",
+                                    "application/octet-stream"
+                                )
+                            )
+                        },
                         modifier = Modifier.weight(1f),
                         contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp)
                     ) {
                         Icon(Icons.Default.FileOpen, contentDescription = null, modifier = Modifier.size(16.dp))
                         Spacer(modifier = Modifier.width(6.dp))
-                        Text("System File Picker", maxLines = 1, style = MaterialTheme.typography.labelMedium)
+                        Text("Browse File (SAF)", maxLines = 1, style = MaterialTheme.typography.labelMedium)
                     }
                     FilledTonalButton(
                         onClick = { folderPickerLauncher.launch(null) },
@@ -205,7 +223,7 @@ fun RestoreBackupPickerDialog(
                     ) {
                         Icon(Icons.Default.FolderOpen, contentDescription = null, modifier = Modifier.size(16.dp))
                         Spacer(modifier = Modifier.width(6.dp))
-                        Text("Pick Folder (SAF)", maxLines = 1, style = MaterialTheme.typography.labelMedium)
+                        Text("Scan Folder", maxLines = 1, style = MaterialTheme.typography.labelMedium)
                     }
                 }
 
