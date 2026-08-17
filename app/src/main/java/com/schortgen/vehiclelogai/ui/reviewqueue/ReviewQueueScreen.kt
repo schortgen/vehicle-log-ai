@@ -15,6 +15,7 @@ import com.schortgen.vehiclelogai.data.models.Event
 import com.schortgen.vehiclelogai.data.models.EventType
 import com.schortgen.vehiclelogai.data.models.ProcessingStatus
 import com.schortgen.vehiclelogai.data.models.ReviewItem
+import com.schortgen.vehiclelogai.data.models.getPhotoPaths
 import androidx.compose.foundation.lazy.LazyRow
 import com.schortgen.vehiclelogai.data.models.toImageModel
 import com.schortgen.vehiclelogai.navigation.Screen
