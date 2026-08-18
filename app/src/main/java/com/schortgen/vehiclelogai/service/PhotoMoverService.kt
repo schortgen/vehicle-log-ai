@@ -1,6 +1,7 @@
 package com.schortgen.vehiclelogai.service
 
 import android.app.RecoverableSecurityException
+import android.content.ContentUris
 import android.content.Context
 import android.content.IntentSender
 import android.net.Uri
@@ -92,10 +93,10 @@ class PhotoMoverService(
 
                         if (copySuccess) {
                             val deleted = deleteOriginal(photoPath)
-                            val pendingDeleteUri = if (!deleted && photoPath.startsWith("content://")) {
-                                try { Uri.parse(photoPath) } catch (_: Exception) { null }
+                            val pendingDeleteUri = if (!deleted) {
+                                findMediaStoreUriForPath(photoPath)
                             } else null
-                            DiagnosticLogger.i("PhotoMover", "Copied photo $photoPath to SAF tree ${destFile.uri}, deletedOriginal=$deleted")
+                            DiagnosticLogger.i("PhotoMover", "Copied photo $photoPath to SAF tree ${destFile.uri}, deletedOriginal=$deleted, pendingDeleteUri=$pendingDeleteUri")
                             return PhotoMoveResult(destFile.uri.toString(), pendingDeleteUri)
                         }
                     }
@@ -137,10 +138,10 @@ class PhotoMoverService(
 
             if (copySuccess) {
                 val deleted = deleteOriginal(photoPath)
-                val pendingDeleteUri = if (!deleted && photoPath.startsWith("content://")) {
-                    try { Uri.parse(photoPath) } catch (_: Exception) { null }
+                val pendingDeleteUri = if (!deleted) {
+                    findMediaStoreUriForPath(photoPath)
                 } else null
-                DiagnosticLogger.i("PhotoMover", "Copied photo $photoPath to local path ${destFile.absolutePath}, deletedOriginal=$deleted")
+                DiagnosticLogger.i("PhotoMover", "Copied photo $photoPath to local path ${destFile.absolutePath}, deletedOriginal=$deleted, pendingDeleteUri=$pendingDeleteUri")
                 return PhotoMoveResult(destFile.absolutePath, pendingDeleteUri)
             }
 
@@ -153,14 +154,16 @@ class PhotoMoverService(
     }
 
     /**
-     * Creates an [IntentSender] for system confirmation dialog to delete URIs that could not be deleted directly.
+     * Creates an [IntentSender] for system confirmation dialog to move URIs to the system Trash (on Android 11+)
+     * or delete URIs that could not be deleted directly (on Android 10).
      */
     fun createDeleteRequestIntentSender(uris: List<Uri>): IntentSender? {
         val validUris = uris.filter { it.toString().startsWith("content://") }
         if (validUris.isEmpty()) return null
         return try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                val pendingIntent = MediaStore.createDeleteRequest(context.contentResolver, validUris)
+                // Use createTrashRequest to safely move photos to System Trash / Recycle Bin (recoverable for 30 days)
+                val pendingIntent = MediaStore.createTrashRequest(context.contentResolver, validUris, true)
                 pendingIntent.intentSender
             } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 for (uri in validUris) {
@@ -175,7 +178,26 @@ class PhotoMoverService(
                 null
             }
         } catch (e: Exception) {
-            DiagnosticLogger.e("PhotoMover", "Failed to create delete request intent sender", e)
+            DiagnosticLogger.e("PhotoMover", "Failed to create trash/delete request intent sender", e)
+            null
+        }
+    }
+
+    /**
+     * Creates an [IntentSender] for system confirmation dialog to restore (untrash) URIs back from system Trash.
+     */
+    fun createUntrashRequestIntentSender(uris: List<Uri>): IntentSender? {
+        val validUris = uris.filter { it.toString().startsWith("content://") }
+        if (validUris.isEmpty()) return null
+        return try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                val pendingIntent = MediaStore.createTrashRequest(context.contentResolver, validUris, false)
+                pendingIntent.intentSender
+            } else {
+                null
+            }
+        } catch (e: Exception) {
+            DiagnosticLogger.e("PhotoMover", "Failed to create untrash request intent sender", e)
             null
         }
     }
@@ -219,8 +241,8 @@ class PhotoMoverService(
                 DiagnosticLogger.d("PhotoMover", "DocumentFile.delete failed for $photoPath: ${e.message}")
             }
 
-            // 2. Try MediaStore DATA column path delete
-            if (!deleted) {
+            // 2. On legacy Android versions (< Q), attempt direct File delete via DATA column
+            if (!deleted && Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
                 try {
                     val projection = arrayOf(MediaStore.Images.Media.DATA)
                     context.contentResolver.query(uri, projection, null, null, null)?.use { cursor ->
@@ -242,7 +264,7 @@ class PhotoMoverService(
                 }
             }
 
-            // 3. Try ContentResolver.delete
+            // 3. Try ContentResolver.delete (standard MediaStore/ContentProvider delete)
             if (!deleted) {
                 try {
                     val rows = context.contentResolver.delete(uri, null, null)
@@ -266,9 +288,58 @@ class PhotoMoverService(
         if (deleted) {
             DiagnosticLogger.i("PhotoMover", "Successfully deleted original photo at $photoPath")
         } else {
-            DiagnosticLogger.w("PhotoMover", "Could not delete original photo at $photoPath")
+            DiagnosticLogger.w("PhotoMover", "Could not delete original photo directly at $photoPath (will request user permission if pending)")
         }
         return deleted
+    }
+
+    /**
+     * Resolves a file path or URI string to a valid MediaStore content URI if possible.
+     */
+    fun findMediaStoreUriForPath(photoPath: String): Uri? {
+        if (photoPath.startsWith("content://media/") || photoPath.contains("media/external/images/media")) {
+            return try { Uri.parse(photoPath) } catch (_: Exception) { null }
+        }
+
+        val fileName = extractFileName(photoPath)
+        val cleanPath = if (photoPath.startsWith("file://")) photoPath.removePrefix("file://") else photoPath
+
+        return try {
+            val projection = arrayOf(MediaStore.Images.Media._ID, MediaStore.Images.Media.DATA, MediaStore.Images.Media.DISPLAY_NAME)
+            val uri = MediaStore.Images.Media.EXTERNAL_CONTENT_URI
+
+            // 1. Try querying by DATA path
+            var foundUri: Uri? = null
+            if (!photoPath.startsWith("content://") && cleanPath.isNotBlank()) {
+                val selection = "${MediaStore.Images.Media.DATA} = ?"
+                val selectionArgs = arrayOf(cleanPath)
+                context.contentResolver.query(uri, projection, selection, selectionArgs, null)?.use { cursor ->
+                    if (cursor.moveToFirst()) {
+                        val idIdx = cursor.getColumnIndexOrThrow(MediaStore.Images.Media._ID)
+                        val id = cursor.getLong(idIdx)
+                        foundUri = ContentUris.withAppendedId(uri, id)
+                    }
+                }
+            }
+
+            // 2. Try querying by DISPLAY_NAME
+            if (foundUri == null && fileName.isNotBlank()) {
+                val selection = "${MediaStore.Images.Media.DISPLAY_NAME} = ?"
+                val selectionArgs = arrayOf(fileName)
+                context.contentResolver.query(uri, projection, selection, selectionArgs, "${MediaStore.Images.Media.DATE_ADDED} DESC")?.use { cursor ->
+                    if (cursor.moveToFirst()) {
+                        val idIdx = cursor.getColumnIndexOrThrow(MediaStore.Images.Media._ID)
+                        val id = cursor.getLong(idIdx)
+                        foundUri = ContentUris.withAppendedId(uri, id)
+                    }
+                }
+            }
+
+            foundUri ?: if (photoPath.startsWith("content://")) Uri.parse(photoPath) else null
+        } catch (e: Exception) {
+            DiagnosticLogger.d("PhotoMover", "findMediaStoreUriForPath failed: ${e.message}")
+            if (photoPath.startsWith("content://")) try { Uri.parse(photoPath) } catch (_: Exception) { null } else null
+        }
     }
 
     private fun extractFileName(photoPath: String): String {
