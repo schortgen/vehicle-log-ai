@@ -586,16 +586,26 @@ class ReviewQueueViewModel(
 
                 // Collect all photo paths: from updated review items, plus any in existingEvent.photoPath
                 val allMovedPhotoPaths = mutableListOf<String>()
-                updatedReviewItems.forEach { it.photoPath?.let { p -> if (p.isNotBlank() && !allMovedPhotoPaths.contains(p)) allMovedPhotoPaths.add(p) } }
+                updatedReviewItems.forEach { item ->
+                    item.photoPath?.let { raw ->
+                        val clean = raw.trim().removePrefix("[").removeSuffix("]").replace("\"", "").replace("'", "")
+                        clean.split(',', '|', '\n', ';').map { it.trim() }.filter { it.isNotBlank() }.forEach { p ->
+                            if (!allMovedPhotoPaths.contains(p)) allMovedPhotoPaths.add(p)
+                        }
+                    }
+                }
 
                 // Also check existingEvent's photoPath (split and move any additional photos not captured in review items)
                 existingEvent?.getPhotoPaths()?.forEach { path ->
-                    if (path.isNotBlank() && !allMovedPhotoPaths.contains(path)) {
+                    if (path.isNotBlank()) {
                         val moveResult = photoMoverService?.movePhotoIfEnabled(path)
                         val movedPath = moveResult?.newPath ?: path
                         moveResult?.pendingDeleteUri?.let { pendingUris.add(it) }
-                        if (!allMovedPhotoPaths.contains(movedPath)) {
-                            allMovedPhotoPaths.add(movedPath)
+                        val cleanMoved = movedPath.trim().removePrefix("[").removeSuffix("]").replace("\"", "").replace("'", "")
+                        cleanMoved.split(',', '|', '\n', ';').map { it.trim() }.filter { it.isNotBlank() }.forEach { p ->
+                            if (!allMovedPhotoPaths.contains(p)) {
+                                allMovedPhotoPaths.add(p)
+                            }
                         }
                     }
                 }
