@@ -115,84 +115,92 @@ fun String.toImageModel(context: Context? = null): Any {
     // 4. Smart fallback for restored backups / migrated photos / SAF tree references:
     // Extract filename (handling URL decoding, query params, etc.) and check photo storage directories & MediaStore
     val rawClean = trimmed.removePrefix("file://")
-    val fileName = try {
+    val fileNames = mutableListOf<String>()
+    try {
         val decoded = Uri.decode(rawClean)
-        decoded.substringAfterLast('/').substringAfterLast('\\').substringBefore('?').trim()
-    } catch (_: Exception) {
-        rawClean.substringAfterLast('/').substringAfterLast('\\').substringBefore('?').trim()
-    }
+        val name1 = decoded.substringAfterLast('/').substringAfterLast('\\').substringBefore('?').trim()
+        if (name1.isNotEmpty()) fileNames.add(name1)
+    } catch (_: Exception) {}
+    val name2 = rawClean.substringAfterLast('/').substringAfterLast('\\').substringBefore('?').trim()
+    if (name2.isNotEmpty() && !fileNames.contains(name2)) fileNames.add(name2)
 
-    if (fileName.isNotEmpty() && context != null) {
+    if (fileNames.isNotEmpty() && context != null) {
         val basePicturesDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES)
+        val baseDcimDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DCIM)
         val candidateDirs = listOfNotNull(
             File(basePicturesDir, "ProcessedVehiclePhotos"),
+            File(baseDcimDir, "ProcessedVehiclePhotos"),
             context.getExternalFilesDir(Environment.DIRECTORY_PICTURES),
+            context.getExternalFilesDir("ProcessedVehiclePhotos"),
             context.getExternalFilesDir(null),
             File(context.filesDir, "photos"),
             File(context.filesDir, "receipts"),
             File(context.filesDir, "images"),
+            File(context.filesDir, "ProcessedVehiclePhotos"),
             basePicturesDir,
-            Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DCIM),
-            File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DCIM), "Camera"),
+            baseDcimDir,
+            File(baseDcimDir, "Camera"),
             Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS),
             context.filesDir,
             context.cacheDir,
             context.externalCacheDir
         )
 
-        for (dir in candidateDirs) {
-            if (dir.exists()) {
-                val candidateFile = File(dir, fileName)
-                if (candidateFile.exists() && candidateFile.canRead()) {
-                    return candidateFile
+        for (fileName in fileNames) {
+            for (dir in candidateDirs) {
+                if (dir.exists()) {
+                    val candidateFile = File(dir, fileName)
+                    if (candidateFile.exists() && candidateFile.canRead()) {
+                        return candidateFile
+                    }
                 }
             }
+
+            // Check user-configured SAF completed photos folder if any
+            try {
+                val app = context.applicationContext as? com.schortgen.vehiclelogai.VehicleLogAIApplication
+                val folderUriStr = app?.settingsRepository?.getCompletedPhotosFolderUri()
+                if (!folderUriStr.isNullOrBlank() && folderUriStr.startsWith("content://")) {
+                    val treeUri = Uri.parse(folderUriStr)
+                    val targetDir = DocumentFile.fromTreeUri(context, treeUri)
+                    val found = targetDir?.findFile(fileName)
+                    if (found != null && found.exists()) {
+                        return found.uri
+                    }
+                }
+            } catch (_: Exception) {}
+
+            // Query MediaStore by DISPLAY_NAME or TITLE as a fallback in case the photo is in media storage under a content URI
+            try {
+                val projection = arrayOf(android.provider.MediaStore.Images.Media._ID)
+                val selection = "${android.provider.MediaStore.Images.Media.DISPLAY_NAME} = ? OR ${android.provider.MediaStore.Images.Media.TITLE} = ?"
+                val selectionArgs = arrayOf(fileName, fileName.substringBeforeLast('.'))
+                context.contentResolver.query(
+                    android.provider.MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
+                    projection,
+                    selection,
+                    selectionArgs,
+                    null
+                )?.use { cursor ->
+                    if (cursor.moveToFirst()) {
+                        val idColumn = cursor.getColumnIndexOrThrow(android.provider.MediaStore.Images.Media._ID)
+                        val id = cursor.getLong(idColumn)
+                        val contentUri = android.content.ContentUris.withAppendedId(
+                            android.provider.MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
+                            id
+                        )
+                        val canRead = try {
+                            context.contentResolver.openInputStream(contentUri)?.use { true } ?: false
+                        } catch (_: Exception) {
+                            false
+                        }
+                        if (canRead) {
+                            return contentUri
+                        }
+                    }
+                }
+            } catch (_: Exception) {}
         }
-
-        // Check user-configured SAF completed photos folder if any
-        try {
-            val app = context.applicationContext as? com.schortgen.vehiclelogai.VehicleLogAIApplication
-            val folderUriStr = app?.settingsRepository?.getCompletedPhotosFolderUri()
-            if (!folderUriStr.isNullOrBlank() && folderUriStr.startsWith("content://")) {
-                val treeUri = Uri.parse(folderUriStr)
-                val targetDir = DocumentFile.fromTreeUri(context, treeUri)
-                val found = targetDir?.findFile(fileName)
-                if (found != null && found.exists()) {
-                    return found.uri
-                }
-            }
-        } catch (_: Exception) {}
-
-        // Query MediaStore by DISPLAY_NAME as a fallback in case the photo is in media storage under a content URI
-        try {
-            val projection = arrayOf(android.provider.MediaStore.Images.Media._ID)
-            val selection = "${android.provider.MediaStore.Images.Media.DISPLAY_NAME} = ?"
-            val selectionArgs = arrayOf(fileName)
-            context.contentResolver.query(
-                android.provider.MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
-                projection,
-                selection,
-                selectionArgs,
-                null
-            )?.use { cursor ->
-                if (cursor.moveToFirst()) {
-                    val idColumn = cursor.getColumnIndexOrThrow(android.provider.MediaStore.Images.Media._ID)
-                    val id = cursor.getLong(idColumn)
-                    val contentUri = android.content.ContentUris.withAppendedId(
-                        android.provider.MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
-                        id
-                    )
-                    val canRead = try {
-                        context.contentResolver.openInputStream(contentUri)?.use { true } ?: false
-                    } catch (_: Exception) {
-                        false
-                    }
-                    if (canRead) {
-                        return contentUri
-                    }
-                }
-            }
-        } catch (_: Exception) {}
     }
 
     // Fallback parsing

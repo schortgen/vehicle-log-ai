@@ -67,6 +67,35 @@ fun TimelineScreen(
 
     val vehicleMap = remember(vehicles) { vehicles.associateBy { it.id } }
 
+    // Pre-index reviewItems and scannedPhotos by eventId for O(1) lookups during LazyColumn scroll
+    val reviewItemsByEvent = remember(reviewItems) {
+        reviewItems.filter { it.eventId != null && it.eventId!! > 0L }
+            .groupBy { it.eventId!! }
+    }
+    val scannedPhotosByEvent = remember(scannedPhotos) {
+        scannedPhotos.filter { it.eventId != null && it.eventId!! > 0L }
+            .groupBy { it.eventId!! }
+    }
+
+    // Pre-calculate latest fuel event before each event for instant O(1) MPG rendering in TimelineEventCard
+    val previousFuelEventsMap = remember(events) {
+        val map = mutableMapOf<Long, Event>()
+        val fuelEventsByVehicle = events
+            .filter { it.eventType == EventType.FUEL && it.odometer != null }
+            .groupBy { it.vehicleId }
+
+        events.filter { it.eventType == EventType.FUEL }.forEach { event ->
+            val vehFuelList = fuelEventsByVehicle[event.vehicleId] ?: emptyList()
+            val prev = vehFuelList
+                .filter { it.eventDate < event.eventDate || (it.eventDate == event.eventDate && it.id < event.id) }
+                .maxByOrNull { it.eventDate }
+            if (prev != null) {
+                map[event.id] = prev
+            }
+        }
+        map
+    }
+
     val filteredEvents = remember(events, searchQuery, selectedVehicleId, selectedEventType, vehicleMap) {
         events.filter { event ->
             val matchesVehicle = selectedVehicleId == null || event.vehicleId == selectedVehicleId
@@ -226,17 +255,21 @@ fun TimelineScreen(
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                     contentPadding = PaddingValues(top = 8.dp, bottom = 80.dp)
                 ) {
-                    items(filteredEvents) { event ->
+                    items(filteredEvents, key = { it.id }) { event ->
                         val vehicleName = event.vehicleId?.let { id ->
                             vehicleMap[id]?.let { v ->
                                 v.nickname ?: "${v.year ?: ""} ${v.make ?: ""} ${v.model ?: ""}".trim().ifEmpty { "Vehicle #${v.id}" }
                             }
                         }
+                        val eventReviewItems = reviewItemsByEvent[event.id] ?: emptyList()
+                        val eventScannedPhotos = scannedPhotosByEvent[event.id] ?: emptyList()
+                        val prevFuelEvent = previousFuelEventsMap[event.id]
+
                         TimelineEventCard(
                             event = event,
-                            allEvents = events,
-                            reviewItems = reviewItems,
-                            scannedPhotos = scannedPhotos,
+                            prevFuelEvent = prevFuelEvent,
+                            eventReviewItems = eventReviewItems,
+                            eventScannedPhotos = eventScannedPhotos,
                             vehicleName = vehicleName,
                             dateFormat = dateFormat,
                             onClick = {
@@ -253,9 +286,9 @@ fun TimelineScreen(
 @Composable
 private fun TimelineEventCard(
     event: Event,
-    allEvents: List<Event> = emptyList(),
-    reviewItems: List<ReviewItem> = emptyList(),
-    scannedPhotos: List<ScannedPhoto> = emptyList(),
+    prevFuelEvent: Event? = null,
+    eventReviewItems: List<ReviewItem> = emptyList(),
+    eventScannedPhotos: List<ScannedPhoto> = emptyList(),
     vehicleName: String?,
     dateFormat: SimpleDateFormat,
     onClick: () -> Unit
@@ -333,7 +366,16 @@ private fun TimelineEventCard(
 
                 when (event.eventType) {
                     EventType.FUEL -> {
-                        val mpg = event.calculateMpg(allEvents)
+                        val mpg = remember(event, prevFuelEvent) {
+                            val gal = event.gallons
+                            if (gal != null && gal > 0) {
+                                if (event.tripDistance != null && event.tripDistance > 0) {
+                                    event.tripDistance / gal
+                                } else if (event.odometer != null && prevFuelEvent?.odometer != null && event.odometer > prevFuelEvent.odometer) {
+                                    (event.odometer - prevFuelEvent.odometer).toDouble() / gal
+                                } else null
+                            } else null
+                        }
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween
@@ -385,9 +427,9 @@ private fun TimelineEventCard(
                     }
                 }
 
-                val photoPaths = remember(event, reviewItems, scannedPhotos) {
+                val photoPaths = remember(event, eventReviewItems, eventScannedPhotos) {
                     val list = mutableListOf<String>()
-                    reviewItems.filter { it.eventId == event.id }.forEach { item ->
+                    eventReviewItems.forEach { item ->
                         val path = item.photoPath
                         if (!path.isNullOrBlank()) {
                             val clean = path.trim().removePrefix("[").removeSuffix("]").replace("\"", "").replace("'", "")
@@ -396,7 +438,7 @@ private fun TimelineEventCard(
                             }
                         }
                     }
-                    scannedPhotos.filter { it.eventId == event.id }.forEach { sp ->
+                    eventScannedPhotos.forEach { sp ->
                         val uri = sp.uri
                         if (uri.isNotBlank()) {
                             val clean = uri.trim().removePrefix("[").removeSuffix("]").replace("\"", "").replace("'", "")
