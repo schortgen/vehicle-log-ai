@@ -81,8 +81,36 @@ fun String.getPhotoStatusInfo(context: Context? = null): Triple<String, String, 
     val trimmed = this.trim()
     if (trimmed.isEmpty()) return Triple("", "", false)
     val fileName = extractPhotoFileName(context)
-    val imageModel = toImageModel(context)
-    var resolvedLocation: String = trimmed
+    
+    // Check if it's a web URL
+    if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) {
+        return Triple(fileName, trimmed, true)
+    }
+
+    // Direct File check without disk heavy tree walking
+    val cleanPath = if (trimmed.startsWith("file://")) trimmed.removePrefix("file://") else trimmed
+    val directFile = File(cleanPath)
+    if (directFile.exists() && directFile.canRead()) {
+        return Triple(fileName, directFile.absolutePath, true)
+    }
+
+    // Content URI quick check
+    if (trimmed.startsWith("content://")) {
+        var canRead = false
+        if (context != null) {
+            try {
+                val uri = Uri.parse(trimmed)
+                canRead = context.contentResolver.openInputStream(uri)?.use { true } ?: false
+            } catch (_: Exception) {
+                canRead = false
+            }
+        }
+        return Triple(fileName, trimmed, canRead)
+    }
+
+    // Fallback path resolution
+    val imageModel = try { toImageModel(context) } catch (_: Exception) { cleanPath }
+    var resolvedLocation = cleanPath
     var isResolved = false
 
     when (imageModel) {
@@ -92,23 +120,14 @@ fun String.getPhotoStatusInfo(context: Context? = null): Triple<String, String, 
         }
         is Uri -> {
             resolvedLocation = imageModel.toString()
-            if (context != null) {
-                isResolved = try {
-                    context.contentResolver.openInputStream(imageModel)?.use { true } ?: false
-                } catch (_: Exception) {
-                    false
-                }
-            } else {
-                isResolved = true
-            }
+            isResolved = true
         }
         is String -> {
+            resolvedLocation = imageModel
             if (imageModel.startsWith("http://") || imageModel.startsWith("https://")) {
-                resolvedLocation = imageModel
                 isResolved = true
             } else {
                 val f = File(imageModel)
-                resolvedLocation = f.absolutePath
                 isResolved = f.exists() && f.canRead()
             }
         }

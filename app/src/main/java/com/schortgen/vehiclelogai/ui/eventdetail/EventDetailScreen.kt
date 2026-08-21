@@ -537,7 +537,9 @@ fun EventDetailScreen(
                                 Spacer(modifier = Modifier.height(6.dp))
                                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                                     photoPaths.forEachIndexed { index, path ->
-                                        val (fileName, resolvedLocation, isResolved) = path.getPhotoStatusInfo(context)
+                                        val (fileName, resolvedLocation, isResolved) = remember(path) {
+                                            path.getPhotoStatusInfo(context)
+                                        }
                                         Surface(
                                             modifier = Modifier
                                                 .fillMaxWidth()
@@ -585,11 +587,9 @@ fun EventDetailScreen(
                                                 }
                                                 Spacer(modifier = Modifier.height(4.dp))
                                                 Text(
-                                                    text = "Path: $resolvedLocation",
+                                                    text = resolvedLocation,
                                                     style = MaterialTheme.typography.bodySmall,
-                                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                                    maxLines = 2,
-                                                    overflow = TextOverflow.Ellipsis
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant
                                                 )
                                             }
                                         }
@@ -735,7 +735,9 @@ fun EventDetailScreen(
                                 shape = RoundedCornerShape(16.dp),
                                 modifier = Modifier.weight(1f, fill = false).padding(end = 8.dp)
                             ) {
-                                val (currentFileName, resolvedPath, isFound) = photoPath.getPhotoStatusInfo(context)
+                                val (currentFileName, resolvedPath, isFound) = remember(photoPath) {
+                                    photoPath.getPhotoStatusInfo(context)
+                                }
                                 Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)) {
                                     val headerText = if (photoPaths.size > 1) {
                                         "Photo ${safeIndex + 1} of ${photoPaths.size}: $currentFileName"
@@ -752,9 +754,7 @@ fun EventDetailScreen(
                                     Text(
                                         text = if (isFound) resolvedPath else "Missing: $resolvedPath",
                                         style = MaterialTheme.typography.bodySmall,
-                                        color = if (isFound) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.error,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis
+                                        color = if (isFound) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.error
                                     )
                                 }
                             }
