@@ -79,8 +79,13 @@ class BackupRepository(
                     }
                 }
             }
-            backupData.reviewItems.forEach { if (it.photoPath.isNotBlank()) allPhotoPaths.add(it.photoPath) }
-            backupData.scannedPhotos.forEach { if (it.filePath.isNotBlank()) allPhotoPaths.add(it.filePath) }
+            backupData.reviewItems.forEach { item ->
+                val p = item.photoPath
+                if (!p.isNullOrBlank()) allPhotoPaths.add(p)
+            }
+            backupData.scannedPhotos.forEach { sp ->
+                if (sp.uri.isNotBlank()) allPhotoPaths.add(sp.uri)
+            }
 
             val outStream = context.contentResolver.openOutputStream(uri)
                 ?: return@withContext Result.failure(Exception("Could not open output stream for ZIP backup."))
@@ -296,16 +301,17 @@ class BackupRepository(
         }
 
         val updatedReviewItems = rawBackupData.reviewItems.map { item ->
-            if (item.photoPath.isNotBlank()) {
-                val updatedPath = mapExtractedPhotoPath(item.photoPath, extractedPhotosMap)
+            val p = item.photoPath
+            if (!p.isNullOrBlank()) {
+                val updatedPath = mapExtractedPhotoPath(p, extractedPhotosMap)
                 item.copy(photoPath = updatedPath)
             } else item
         }
 
         val updatedScannedPhotos = rawBackupData.scannedPhotos.map { sp ->
-            if (sp.filePath.isNotBlank()) {
-                val updatedPath = mapExtractedPhotoPath(sp.filePath, extractedPhotosMap)
-                sp.copy(filePath = updatedPath)
+            if (sp.uri.isNotBlank()) {
+                val updatedPath = mapExtractedPhotoPath(sp.uri, extractedPhotosMap)
+                sp.copy(uri = updatedPath)
             } else sp
         }
 

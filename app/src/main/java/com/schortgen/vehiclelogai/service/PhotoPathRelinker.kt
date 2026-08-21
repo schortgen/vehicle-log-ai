@@ -98,7 +98,7 @@ object PhotoPathRelinker {
 
             for (item in reviewItems) {
                 val rawPath = item.photoPath
-                if (rawPath.isBlank()) continue
+                if (rawPath.isNullOrBlank()) continue
                 total++
 
                 val (newPath, wasFixed, isValid) = resolveAndRepairPath(context, rawPath, photoIndex)
@@ -123,14 +123,14 @@ object PhotoPathRelinker {
             val scannedPhotosToUpdate = mutableListOf<ScannedPhoto>()
 
             for (sp in scannedPhotos) {
-                val rawPath = sp.filePath
+                val rawPath = sp.uri
                 if (rawPath.isBlank()) continue
                 total++
 
                 val (newPath, wasFixed, isValid) = resolveAndRepairPath(context, rawPath, photoIndex)
                 if (wasFixed) {
                     relinked++
-                    scannedPhotosToUpdate.add(sp.copy(filePath = newPath))
+                    scannedPhotosToUpdate.add(sp.copy(uri = newPath))
                 } else if (isValid) {
                     alreadyValid++
                 } else {
