@@ -163,12 +163,17 @@ fun String.extractPhotoFileName(context: Context? = null): String {
     return if (fileName.isNotBlank()) fileName else trimmed
 }
 
+private val resolvedImageModelCache = java.util.concurrent.ConcurrentHashMap<String, Any>()
+
 fun String.toImageModel(context: Context? = null): Any {
     val trimmed = this.trim()
     if (trimmed.isEmpty()) return ""
 
+    resolvedImageModelCache[trimmed]?.let { return it }
+
     // 1. Web URLs
     if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) {
+        resolvedImageModelCache[trimmed] = trimmed
         return trimmed
     }
 
@@ -176,18 +181,8 @@ fun String.toImageModel(context: Context? = null): Any {
     if (trimmed.startsWith("content://")) {
         val uri = try { Uri.parse(trimmed) } catch (_: Exception) { null }
         if (uri != null) {
-            if (context != null) {
-                val canRead = try {
-                    context.contentResolver.openInputStream(uri)?.use { true } ?: false
-                } catch (_: Exception) {
-                    false
-                }
-                if (canRead) {
-                    return uri
-                }
-            } else {
-                return uri
-            }
+            resolvedImageModelCache[trimmed] = uri
+            return uri
         }
     }
 
@@ -195,11 +190,11 @@ fun String.toImageModel(context: Context? = null): Any {
     val cleanPath = if (trimmed.startsWith("file://")) trimmed.removePrefix("file://") else trimmed
     val directFile = File(cleanPath)
     if (directFile.exists() && directFile.canRead()) {
+        resolvedImageModelCache[trimmed] = directFile
         return directFile
     }
 
-    // 4. Smart fallback for restored backups / migrated photos / SAF tree references:
-    // Extract filename (handling URL decoding, query params, etc.) and check photo storage directories & MediaStore
+    // 4. Extract filename and check common vehicle photo directories
     val rawClean = trimmed.removePrefix("file://")
     val fileNames = mutableListOf<String>()
     try {
@@ -218,18 +213,9 @@ fun String.toImageModel(context: Context? = null): Any {
             File(baseDcimDir, "ProcessedVehiclePhotos"),
             context.getExternalFilesDir(Environment.DIRECTORY_PICTURES),
             context.getExternalFilesDir("ProcessedVehiclePhotos"),
-            context.getExternalFilesDir(null),
             File(context.filesDir, "photos"),
-            File(context.filesDir, "receipts"),
-            File(context.filesDir, "images"),
-            File(context.filesDir, "ProcessedVehiclePhotos"),
-            basePicturesDir,
-            baseDcimDir,
             File(baseDcimDir, "Camera"),
-            Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS),
-            context.filesDir,
-            context.cacheDir,
-            context.externalCacheDir
+            basePicturesDir
         )
 
         for (fileName in fileNames) {
@@ -237,60 +223,16 @@ fun String.toImageModel(context: Context? = null): Any {
                 if (dir.exists()) {
                     val candidateFile = File(dir, fileName)
                     if (candidateFile.exists() && candidateFile.canRead()) {
+                        resolvedImageModelCache[trimmed] = candidateFile
                         return candidateFile
                     }
                 }
             }
-
-            // Check user-configured SAF completed photos folder if any
-            try {
-                val app = context.applicationContext as? com.schortgen.vehiclelogai.VehicleLogAIApplication
-                val folderUriStr = app?.settingsRepository?.getCompletedPhotosFolderUri()
-                if (!folderUriStr.isNullOrBlank() && folderUriStr.startsWith("content://")) {
-                    val treeUri = Uri.parse(folderUriStr)
-                    val targetDir = DocumentFile.fromTreeUri(context, treeUri)
-                    val found = targetDir?.findFile(fileName)
-                    if (found != null && found.exists()) {
-                        return found.uri
-                    }
-                }
-            } catch (_: Exception) {}
-
-            // Query MediaStore by DISPLAY_NAME or TITLE as a fallback in case the photo is in media storage under a content URI
-            try {
-                val projection = arrayOf(android.provider.MediaStore.Images.Media._ID)
-                val selection = "${android.provider.MediaStore.Images.Media.DISPLAY_NAME} = ? OR ${android.provider.MediaStore.Images.Media.TITLE} = ?"
-                val selectionArgs = arrayOf(fileName, fileName.substringBeforeLast('.'))
-                context.contentResolver.query(
-                    android.provider.MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
-                    projection,
-                    selection,
-                    selectionArgs,
-                    null
-                )?.use { cursor ->
-                    if (cursor.moveToFirst()) {
-                        val idColumn = cursor.getColumnIndexOrThrow(android.provider.MediaStore.Images.Media._ID)
-                        val id = cursor.getLong(idColumn)
-                        val contentUri = android.content.ContentUris.withAppendedId(
-                            android.provider.MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
-                            id
-                        )
-                        val canRead = try {
-                            context.contentResolver.openInputStream(contentUri)?.use { true } ?: false
-                        } catch (_: Exception) {
-                            false
-                        }
-                        if (canRead) {
-                            return contentUri
-                        }
-                    }
-                }
-            } catch (_: Exception) {}
         }
     }
 
     // Fallback parsing
-    return when {
+    val fallback: Any = when {
         trimmed.startsWith("content://") -> Uri.parse(trimmed)
         trimmed.startsWith("file://") -> Uri.parse(trimmed)
         trimmed.startsWith("/") -> File(trimmed)
@@ -299,6 +241,8 @@ fun String.toImageModel(context: Context? = null): Any {
             if (file.exists() || cleanPath.contains("/")) file else Uri.parse(trimmed)
         }
     }
+    resolvedImageModelCache[trimmed] = fallback
+    return fallback
 }
 
 

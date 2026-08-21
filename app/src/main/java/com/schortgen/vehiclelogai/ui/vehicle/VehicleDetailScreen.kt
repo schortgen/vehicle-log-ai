@@ -63,6 +63,13 @@ fun VehicleDetailScreen(
         app?.database?.scannedPhotoDao()?.observeAll() ?: kotlinx.coroutines.flow.flowOf(emptyList())
     }.collectAsState(initial = emptyList())
 
+    val reviewItemsByEvent = remember(reviewItems) {
+        reviewItems.filter { it.eventId != null && it.eventId!! > 0L }.groupBy { it.eventId!! }
+    }
+    val scannedPhotosByEvent = remember(scannedPhotos) {
+        scannedPhotos.filter { it.eventId != null && it.eventId!! > 0L }.groupBy { it.eventId!! }
+    }
+
     val dateFormat = remember { SimpleDateFormat("MMM dd, yyyy HH:mm", Locale.getDefault()) }
 
     // Fetch the vehicle from the local database when the screen loads
@@ -168,12 +175,14 @@ fun VehicleDetailScreen(
                         }
                     }
                 } else {
-                    items(sortedEvents) { event ->
+                    items(sortedEvents, key = { it.id }) { event ->
+                        val eventReviewItems = reviewItemsByEvent[event.id] ?: emptyList()
+                        val eventScannedPhotos = scannedPhotosByEvent[event.id] ?: emptyList()
                         TimelineCard(
                             event = event,
                             allEvents = sortedEvents,
-                            reviewItems = reviewItems,
-                            scannedPhotos = scannedPhotos,
+                            eventReviewItems = eventReviewItems,
+                            eventScannedPhotos = eventScannedPhotos,
                             dateFormat = dateFormat,
                             onClick = {
                                 navController.navigate(Screen.EventDetail.createRoute(event.id))
@@ -195,8 +204,8 @@ fun VehicleDetailScreen(
 private fun TimelineCard(
     event: com.schortgen.vehiclelogai.data.models.Event,
     allEvents: List<com.schortgen.vehiclelogai.data.models.Event> = emptyList(),
-    reviewItems: List<ReviewItem> = emptyList(),
-    scannedPhotos: List<ScannedPhoto> = emptyList(),
+    eventReviewItems: List<ReviewItem> = emptyList(),
+    eventScannedPhotos: List<ScannedPhoto> = emptyList(),
     dateFormat: SimpleDateFormat,
     onClick: () -> Unit
 ) {
@@ -322,9 +331,9 @@ private fun TimelineCard(
                     }
                 }
 
-                val photoPaths = remember(event, reviewItems, scannedPhotos) {
+                val photoPaths = remember(event.photoPath, eventReviewItems.size, eventScannedPhotos.size) {
                     val list = mutableListOf<String>()
-                    reviewItems.filter { it.eventId == event.id }.forEach { item ->
+                    eventReviewItems.forEach { item ->
                         val path = item.photoPath
                         if (!path.isNullOrBlank()) {
                             val clean = path.trim().removePrefix("[").removeSuffix("]").replace("\"", "").replace("'", "")
@@ -333,7 +342,7 @@ private fun TimelineCard(
                             }
                         }
                     }
-                    scannedPhotos.filter { it.eventId == event.id }.forEach { sp ->
+                    eventScannedPhotos.forEach { sp ->
                         val uri = sp.uri
                         if (uri.isNotBlank()) {
                             val clean = uri.trim().removePrefix("[").removeSuffix("]").replace("\"", "").replace("'", "")
@@ -358,10 +367,13 @@ private fun TimelineCard(
                         horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
                         photoPaths.take(4).forEach { path ->
-                            val model = ImageRequest.Builder(currentCtx)
-                                .data(path.toImageModel(currentCtx))
-                                .crossfade(true)
-                                .build()
+                            val model = remember(path) {
+                                ImageRequest.Builder(currentCtx)
+                                    .data(path.toImageModel(currentCtx))
+                                    .size(100, 100)
+                                    .crossfade(false)
+                                    .build()
+                            }
                             Box(
                                 modifier = Modifier
                                     .size(36.dp)

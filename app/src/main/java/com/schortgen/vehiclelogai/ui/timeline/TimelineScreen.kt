@@ -427,7 +427,7 @@ private fun TimelineEventCard(
                     }
                 }
 
-                val photoPaths = remember(event, eventReviewItems, eventScannedPhotos) {
+                val photoPaths = remember(event.photoPath, eventReviewItems.size, eventScannedPhotos.size) {
                     val list = mutableListOf<String>()
                     eventReviewItems.forEach { item ->
                         val path = item.photoPath
@@ -463,10 +463,13 @@ private fun TimelineEventCard(
                         horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
                         photoPaths.take(4).forEach { path ->
-                            val model = ImageRequest.Builder(currentCtx)
-                                .data(path.toImageModel(currentCtx))
-                                .crossfade(true)
-                                .build()
+                            val model = remember(path) {
+                                ImageRequest.Builder(currentCtx)
+                                    .data(path.toImageModel(currentCtx))
+                                    .size(100, 100)
+                                    .crossfade(false)
+                                    .build()
+                            }
                             Box(
                                 modifier = Modifier
                                     .size(36.dp)
