@@ -165,6 +165,10 @@ fun String.extractPhotoFileName(context: Context? = null): String {
 
 private val resolvedImageModelCache = java.util.concurrent.ConcurrentHashMap<String, Any>()
 
+fun clearImageModelCache() {
+    resolvedImageModelCache.clear()
+}
+
 fun String.toImageModel(context: Context? = null): Any {
     val trimmed = this.trim()
     if (trimmed.isEmpty()) return ""
@@ -194,7 +198,7 @@ fun String.toImageModel(context: Context? = null): Any {
         return directFile
     }
 
-    // 4. Extract filename and check common vehicle photo directories + configured target folder
+    // 4. Extract filename and check user-selected folders, SAF trees, and standard photo directories
     val rawClean = trimmed.removePrefix("file://")
     val fileNames = mutableListOf<String>()
     try {
@@ -206,9 +210,35 @@ fun String.toImageModel(context: Context? = null): Any {
     if (name2.isNotEmpty() && !fileNames.contains(name2)) fileNames.add(name2)
 
     if (fileNames.isNotEmpty() && context != null) {
+        val app = context.applicationContext as? com.schortgen.vehiclelogai.VehicleLogAIApplication
+        val userFolderName = app?.settingsRepository?.getCompletedPhotosFolderName()
+        val userFolderUriStr = app?.settingsRepository?.getCompletedPhotosFolderUri()
+
         val basePicturesDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES)
         val baseDcimDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DCIM)
-        val candidateDirs = listOfNotNull(
+        val baseDocsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOCUMENTS)
+        val baseDownloadsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
+        val externalStorageDir = Environment.getExternalStorageDirectory()
+
+        val candidateDirs = mutableListOf<File>()
+
+        // Add user-selected folder by name/path if available
+        if (!userFolderName.isNullOrBlank()) {
+            val cleanFolderName = userFolderName.trim()
+            if (cleanFolderName.startsWith("/")) {
+                candidateDirs.add(File(cleanFolderName))
+            } else {
+                candidateDirs.add(File(externalStorageDir, cleanFolderName))
+                candidateDirs.add(File(basePicturesDir, cleanFolderName))
+                candidateDirs.add(File(baseDcimDir, cleanFolderName))
+                candidateDirs.add(File(baseDocsDir, cleanFolderName))
+                candidateDirs.add(File(baseDownloadsDir, cleanFolderName))
+                context.getExternalFilesDir(null)?.let { candidateDirs.add(File(it, cleanFolderName)) }
+            }
+        }
+
+        // Add standard directories
+        listOfNotNull(
             File(basePicturesDir, "ProcessedVehiclePhotos"),
             File(baseDcimDir, "ProcessedVehiclePhotos"),
             context.getExternalFilesDir(Environment.DIRECTORY_PICTURES),
@@ -218,9 +248,12 @@ fun String.toImageModel(context: Context? = null): Any {
             File(basePicturesDir, "Camera"),
             File(basePicturesDir, "Screenshots"),
             basePicturesDir,
-            baseDcimDir
-        )
+            baseDcimDir,
+            baseDocsDir,
+            baseDownloadsDir
+        ).forEach { if (!candidateDirs.contains(it)) candidateDirs.add(it) }
 
+        // Check local filesystem candidate directories
         for (fileName in fileNames) {
             for (dir in candidateDirs) {
                 if (dir.exists()) {
@@ -233,12 +266,22 @@ fun String.toImageModel(context: Context? = null): Any {
             }
         }
 
-        // Check if app has configured custom completed folder SAF URI
+        // Check user-configured SAF folder tree URIs and persisted URI permissions
+        val treeUrisToCheck = mutableListOf<Uri>()
+        if (!userFolderUriStr.isNullOrBlank() && userFolderUriStr.startsWith("content://")) {
+            try { treeUrisToCheck.add(Uri.parse(userFolderUriStr)) } catch (_: Exception) {}
+        }
         try {
-            val app = context.applicationContext as? com.schortgen.vehiclelogai.VehicleLogAIApplication
-            val configuredUriStr = app?.settingsRepository?.getCompletedPhotosFolderUri()
-            if (!configuredUriStr.isNullOrBlank() && configuredUriStr.startsWith("content://")) {
-                val treeUri = Uri.parse(configuredUriStr)
+            context.contentResolver.persistedUriPermissions.forEach { perm ->
+                val u = perm.uri
+                if (u.toString().startsWith("content://") && !treeUrisToCheck.contains(u)) {
+                    treeUrisToCheck.add(u)
+                }
+            }
+        } catch (_: Exception) {}
+
+        for (treeUri in treeUrisToCheck) {
+            try {
                 val targetDir = DocumentFile.fromTreeUri(context, treeUri)
                 if (targetDir != null && targetDir.exists()) {
                     for (fileName in fileNames) {
@@ -249,8 +292,8 @@ fun String.toImageModel(context: Context? = null): Any {
                         }
                     }
                 }
-            }
-        } catch (_: Exception) {}
+            } catch (_: Exception) {}
+        }
     }
 
     // Fallback parsing

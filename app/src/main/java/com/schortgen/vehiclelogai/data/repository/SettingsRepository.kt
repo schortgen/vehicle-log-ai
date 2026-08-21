@@ -56,6 +56,9 @@ class SettingsRepository(context: Context) {
             .apply()
         _completedPhotosFolderUri.value = uri
         _completedPhotosFolderName.value = displayName ?: "Pictures/ProcessedVehiclePhotos"
+        try {
+            com.schortgen.vehiclelogai.data.models.clearImageModelCache()
+        } catch (_: Exception) {}
     }
 
     fun hasPromptedPhotoDestination(): Boolean = _hasPromptedPhotoDestination.value
