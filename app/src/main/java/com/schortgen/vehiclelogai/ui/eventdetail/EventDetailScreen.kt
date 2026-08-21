@@ -36,6 +36,7 @@ import com.schortgen.vehiclelogai.data.models.EventType
 import com.schortgen.vehiclelogai.data.models.calculateMpg
 import com.schortgen.vehiclelogai.data.models.extractPhotoFileName
 import com.schortgen.vehiclelogai.data.models.getPhotoPaths
+import com.schortgen.vehiclelogai.data.models.getPhotoStatusInfo
 import com.schortgen.vehiclelogai.data.models.toImageModel
 import com.schortgen.vehiclelogai.debug.DiagnosticLogger
 import com.schortgen.vehiclelogai.ui.events.EventViewModel
@@ -528,15 +529,15 @@ fun EventDetailScreen(
 
                                 Spacer(modifier = Modifier.height(12.dp))
                                 Text(
-                                    text = if (photoPaths.size == 1) "Grouped Photo File:" else "Grouped Photo Files (${photoPaths.size}):",
+                                    text = if (photoPaths.size == 1) "Grouped Photo File & Path:" else "Grouped Photo Files & Paths (${photoPaths.size}):",
                                     style = MaterialTheme.typography.labelMedium,
                                     fontWeight = FontWeight.SemiBold,
                                     color = MaterialTheme.colorScheme.onSurface
                                 )
                                 Spacer(modifier = Modifier.height(6.dp))
-                                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                                     photoPaths.forEachIndexed { index, path ->
-                                        val fileName = path.extractPhotoFileName(context)
+                                        val (fileName, resolvedLocation, isResolved) = path.getPhotoStatusInfo(context)
                                         Surface(
                                             modifier = Modifier
                                                 .fillMaxWidth()
@@ -548,36 +549,48 @@ fun EventDetailScreen(
                                             color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
                                             shape = RoundedCornerShape(8.dp)
                                         ) {
-                                            Row(
+                                            Column(
                                                 modifier = Modifier
                                                     .fillMaxWidth()
-                                                    .padding(horizontal = 12.dp, vertical = 8.dp),
-                                                verticalAlignment = Alignment.CenterVertically,
-                                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                                    .padding(horizontal = 12.dp, vertical = 8.dp)
                                             ) {
-                                                Text(
-                                                    text = "📷",
-                                                    style = MaterialTheme.typography.bodySmall
-                                                )
-                                                Text(
-                                                    text = fileName,
-                                                    style = MaterialTheme.typography.bodySmall,
-                                                    fontWeight = FontWeight.Medium,
-                                                    maxLines = 1,
-                                                    overflow = TextOverflow.Ellipsis,
-                                                    modifier = Modifier.weight(1f)
-                                                )
-                                                Surface(
-                                                    color = MaterialTheme.colorScheme.primaryContainer,
-                                                    shape = RoundedCornerShape(4.dp)
+                                                Row(
+                                                    modifier = Modifier.fillMaxWidth(),
+                                                    verticalAlignment = Alignment.CenterVertically,
+                                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                                                 ) {
                                                     Text(
-                                                        text = "Photo #${index + 1}",
-                                                        style = MaterialTheme.typography.labelSmall,
-                                                        color = MaterialTheme.colorScheme.onPrimaryContainer,
-                                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                                        text = if (isResolved) "📷" else "⚠️",
+                                                        style = MaterialTheme.typography.bodySmall
                                                     )
+                                                    Text(
+                                                        text = fileName,
+                                                        style = MaterialTheme.typography.bodySmall,
+                                                        fontWeight = FontWeight.SemiBold,
+                                                        maxLines = 1,
+                                                        overflow = TextOverflow.Ellipsis,
+                                                        modifier = Modifier.weight(1f)
+                                                    )
+                                                    Surface(
+                                                        color = if (isResolved) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.errorContainer,
+                                                        shape = RoundedCornerShape(4.dp)
+                                                    ) {
+                                                        Text(
+                                                            text = if (isResolved) "Photo #${index + 1} (Found)" else "Photo #${index + 1} (Missing)",
+                                                            style = MaterialTheme.typography.labelSmall,
+                                                            color = if (isResolved) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onErrorContainer,
+                                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                                        )
+                                                    }
                                                 }
+                                                Spacer(modifier = Modifier.height(4.dp))
+                                                Text(
+                                                    text = "Path: $resolvedLocation",
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                    maxLines = 2,
+                                                    overflow = TextOverflow.Ellipsis
+                                                )
                                             }
                                         }
                                     }
@@ -722,20 +735,28 @@ fun EventDetailScreen(
                                 shape = RoundedCornerShape(16.dp),
                                 modifier = Modifier.weight(1f, fill = false).padding(end = 8.dp)
                             ) {
-                                val currentFileName = photoPath.extractPhotoFileName(context)
-                                val headerText = if (photoPaths.size > 1) {
-                                    "Photo ${safeIndex + 1} of ${photoPaths.size}: $currentFileName"
-                                } else {
-                                    currentFileName
+                                val (currentFileName, resolvedPath, isFound) = photoPath.getPhotoStatusInfo(context)
+                                Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)) {
+                                    val headerText = if (photoPaths.size > 1) {
+                                        "Photo ${safeIndex + 1} of ${photoPaths.size}: $currentFileName"
+                                    } else {
+                                        currentFileName
+                                    }
+                                    Text(
+                                        text = headerText,
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        fontWeight = FontWeight.SemiBold,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                    Text(
+                                        text = if (isFound) resolvedPath else "Missing: $resolvedPath",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = if (isFound) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.error,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
                                 }
-                                Text(
-                                    text = headerText,
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    fontWeight = FontWeight.Medium,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
-                                )
                             }
 
                             IconButton(

@@ -77,6 +77,46 @@ fun Event.getPhotoPaths(): List<String> {
         .distinct()
 }
 
+fun String.getPhotoStatusInfo(context: Context? = null): Triple<String, String, Boolean> {
+    val trimmed = this.trim()
+    if (trimmed.isEmpty()) return Triple("", "", false)
+    val fileName = extractPhotoFileName(context)
+    val imageModel = toImageModel(context)
+    var resolvedLocation: String = trimmed
+    var isResolved = false
+
+    when (imageModel) {
+        is File -> {
+            resolvedLocation = imageModel.absolutePath
+            isResolved = imageModel.exists() && imageModel.canRead()
+        }
+        is Uri -> {
+            resolvedLocation = imageModel.toString()
+            if (context != null) {
+                isResolved = try {
+                    context.contentResolver.openInputStream(imageModel)?.use { true } ?: false
+                } catch (_: Exception) {
+                    false
+                }
+            } else {
+                isResolved = true
+            }
+        }
+        is String -> {
+            if (imageModel.startsWith("http://") || imageModel.startsWith("https://")) {
+                resolvedLocation = imageModel
+                isResolved = true
+            } else {
+                val f = File(imageModel)
+                resolvedLocation = f.absolutePath
+                isResolved = f.exists() && f.canRead()
+            }
+        }
+    }
+
+    return Triple(fileName, resolvedLocation, isResolved)
+}
+
 fun String.extractPhotoFileName(context: Context? = null): String {
     val trimmed = this.trim()
     if (trimmed.isEmpty()) return ""
