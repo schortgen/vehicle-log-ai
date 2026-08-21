@@ -174,7 +174,32 @@ object PhotoPathRelinker {
     }
 
     /**
-     * Checks if a path or JSON array of paths is accessible, and if not, finds matching files from the index.
+     * Splits any photo path representation (JSON array, comma, pipe, semicolon, or newline separated)
+     * into individual clean photo path strings.
+     */
+    fun splitAllPhotoPaths(rawPath: String?): List<String> {
+        if (rawPath.isNullOrBlank()) return emptyList()
+        val trimmed = rawPath.trim()
+        if (trimmed.startsWith("[") && trimmed.endsWith("]")) {
+            try {
+                val type = object : TypeToken<List<String>>() {}.type
+                val list: List<String> = gson.fromJson(trimmed, type)
+                val filtered = list.map { it.trim() }.filter { it.isNotBlank() }
+                if (filtered.isNotEmpty()) return filtered
+            } catch (_: Exception) {}
+            val clean = trimmed.removePrefix("[").removeSuffix("]").replace("\"", "").replace("'", "")
+            return clean.split(',', '|', '\n', ';').map { it.trim() }.filter { it.isNotBlank() }
+        }
+        if (trimmed.contains(",") || trimmed.contains("|") || trimmed.contains("\n") || trimmed.contains(";")) {
+            val clean = trimmed.removePrefix("[").removeSuffix("]").replace("\"", "").replace("'", "")
+            return clean.split(',', '|', '\n', ';').map { it.trim() }.filter { it.isNotBlank() }
+        }
+        return listOf(trimmed)
+    }
+
+    /**
+     * Checks if a path, JSON array of paths, or delimiter-separated list of paths is accessible,
+     * and if not, finds matching files from the index.
      * Returns Triple(repairedPathString, wasRepaired, isValid).
      */
     private fun resolveAndRepairPath(
@@ -183,6 +208,8 @@ object PhotoPathRelinker {
         photoIndex: Map<String, String>
     ): Triple<String, Boolean, Boolean> {
         val trimmed = rawPath.trim()
+        if (trimmed.isEmpty()) return Triple(rawPath, false, false)
+
         if (trimmed.startsWith("[") && trimmed.endsWith("]")) {
             // Multi-photo JSON array
             return try {
@@ -198,11 +225,39 @@ object PhotoPathRelinker {
                 }
                 Triple(gson.toJson(fixedList), anyFixed, allValid)
             } catch (_: Exception) {
-                resolveSinglePath(context, trimmed, photoIndex)
+                resolveDelimitedPath(context, trimmed, photoIndex)
             }
+        } else if (trimmed.contains(",") || trimmed.contains("|") || trimmed.contains("\n") || trimmed.contains(";")) {
+            return resolveDelimitedPath(context, trimmed, photoIndex)
         } else {
             return resolveSinglePath(context, trimmed, photoIndex)
         }
+    }
+
+    private fun resolveDelimitedPath(
+        context: Context,
+        rawDelimited: String,
+        photoIndex: Map<String, String>
+    ): Triple<String, Boolean, Boolean> {
+        val delimiter = when {
+            rawDelimited.contains(",") -> ","
+            rawDelimited.contains("|") -> "|"
+            rawDelimited.contains(";") -> ";"
+            else -> "\n"
+        }
+        val clean = rawDelimited.trim().removePrefix("[").removeSuffix("]").replace("\"", "").replace("'", "")
+        val paths = clean.split(',', '|', '\n', ';').map { it.trim() }.filter { it.isNotBlank() }
+        if (paths.isEmpty()) return Triple(rawDelimited, false, false)
+
+        var anyFixed = false
+        var allValid = true
+        val fixedList = paths.map { singlePath ->
+            val (resPath, fixed, valid) = resolveSinglePath(context, singlePath, photoIndex)
+            if (fixed) anyFixed = true
+            if (!valid) allValid = false
+            resPath
+        }
+        return Triple(fixedList.joinToString(delimiter), anyFixed, allValid)
     }
 
     private fun resolveSinglePath(
@@ -211,6 +266,9 @@ object PhotoPathRelinker {
         photoIndex: Map<String, String>
     ): Triple<String, Boolean, Boolean> {
         val trimmed = singlePath.trim()
+            .removePrefix("[").removeSuffix("]")
+            .removePrefix("\"").removeSuffix("\"")
+            .removePrefix("'").removeSuffix("'")
         if (trimmed.isEmpty()) return Triple(singlePath, false, false)
 
         // Check if current path is already accessible
@@ -234,6 +292,9 @@ object PhotoPathRelinker {
     fun isPathAccessible(context: Context, path: String): Boolean {
         if (path.isBlank()) return false
         val clean = path.trim()
+            .removePrefix("[").removeSuffix("]")
+            .removePrefix("\"").removeSuffix("\"")
+            .removePrefix("'").removeSuffix("'")
         if (clean.startsWith("content://")) {
             return try {
                 val uri = Uri.parse(clean)
@@ -248,7 +309,11 @@ object PhotoPathRelinker {
 
     fun extractCandidateFileNames(path: String): List<String> {
         val results = mutableListOf<String>()
-        val clean = path.trim().removePrefix("file://")
+        val clean = path.trim()
+            .removePrefix("[").removeSuffix("]")
+            .removePrefix("\"").removeSuffix("\"")
+            .removePrefix("'").removeSuffix("'")
+            .removePrefix("file://")
         try {
             val decoded = URLDecoder.decode(clean, "UTF-8")
             val name1 = File(decoded).name.trim()

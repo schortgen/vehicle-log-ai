@@ -66,25 +66,19 @@ class BackupRepository(
             backupData.events.forEach { event ->
                 val p = event.photoPath
                 if (!p.isNullOrBlank()) {
-                    if (p.startsWith("[") && p.endsWith("]")) {
-                        try {
-                            val type = object : TypeToken<List<String>>() {}.type
-                            val list: List<String> = gson.fromJson(p, type)
-                            allPhotoPaths.addAll(list.filter { it.isNotBlank() })
-                        } catch (_: Exception) {
-                            allPhotoPaths.add(p)
-                        }
-                    } else {
-                        allPhotoPaths.add(p)
-                    }
+                    allPhotoPaths.addAll(PhotoPathRelinker.splitAllPhotoPaths(p))
                 }
             }
             backupData.reviewItems.forEach { item ->
                 val p = item.photoPath
-                if (!p.isNullOrBlank()) allPhotoPaths.add(p)
+                if (!p.isNullOrBlank()) {
+                    allPhotoPaths.addAll(PhotoPathRelinker.splitAllPhotoPaths(p))
+                }
             }
             backupData.scannedPhotos.forEach { sp ->
-                if (sp.uri.isNotBlank()) allPhotoPaths.add(sp.uri)
+                if (sp.uri.isNotBlank()) {
+                    allPhotoPaths.addAll(PhotoPathRelinker.splitAllPhotoPaths(sp.uri))
+                }
             }
 
             val outStream = context.contentResolver.openOutputStream(uri)
@@ -329,34 +323,51 @@ class BackupRepository(
 
     private fun mapExtractedPhotoPath(originalPath: String, extractedMap: Map<String, String>): String {
         val trimmed = originalPath.trim()
+        if (trimmed.isEmpty()) return originalPath
+
+        // 1. Multi-photo JSON array format
         if (trimmed.startsWith("[") && trimmed.endsWith("]")) {
             return try {
                 val type = object : TypeToken<List<String>>() {}.type
                 val list: List<String> = gson.fromJson(trimmed, type)
                 val mapped = list.map { single ->
-                    val names = PhotoPathRelinker.extractCandidateFileNames(single)
-                    var found = single
-                    for (n in names) {
-                        val match = extractedMap[n.lowercase()]
-                        if (match != null) {
-                            found = match
-                            break
-                        }
-                    }
-                    found
+                    mapSinglePhotoPath(single, extractedMap)
                 }
                 gson.toJson(mapped)
             } catch (_: Exception) {
-                originalPath
+                mapDelimitedPhotoPaths(trimmed, extractedMap)
             }
-        } else {
-            val names = PhotoPathRelinker.extractCandidateFileNames(trimmed)
-            for (n in names) {
-                val match = extractedMap[n.lowercase()]
-                if (match != null) return match
-            }
-            return originalPath
         }
+
+        // 2. Multi-photo Delimited format (comma, pipe, semicolon, newline)
+        if (trimmed.contains(",") || trimmed.contains("|") || trimmed.contains("\n") || trimmed.contains(";")) {
+            return mapDelimitedPhotoPaths(trimmed, extractedMap)
+        }
+
+        // 3. Single photo path
+        return mapSinglePhotoPath(trimmed, extractedMap)
+    }
+
+    private fun mapDelimitedPhotoPaths(delimited: String, extractedMap: Map<String, String>): String {
+        val delimiter = when {
+            delimited.contains(",") -> ","
+            delimited.contains("|") -> "|"
+            delimited.contains(";") -> ";"
+            else -> "\n"
+        }
+        val clean = delimited.removePrefix("[").removeSuffix("]").replace("\"", "").replace("'", "")
+        val parts = clean.split(',', '|', '\n', ';').map { it.trim() }.filter { it.isNotBlank() }
+        val mapped = parts.map { single -> mapSinglePhotoPath(single, extractedMap) }
+        return mapped.joinToString(delimiter)
+    }
+
+    private fun mapSinglePhotoPath(single: String, extractedMap: Map<String, String>): String {
+        val names = PhotoPathRelinker.extractCandidateFileNames(single)
+        for (n in names) {
+            val match = extractedMap[n.lowercase()]
+            if (match != null) return match
+        }
+        return single
     }
 
     private suspend fun restoreDatabaseRows(backupData: BackupData, clearExisting: Boolean) {
