@@ -1,28 +1,38 @@
 package com.schortgen.vehiclelogai.ui.eventdetail
 
 import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
@@ -33,6 +43,7 @@ import coil.request.ImageRequest
 import com.schortgen.vehiclelogai.VehicleLogAIApplication
 import com.schortgen.vehiclelogai.data.models.Event
 import com.schortgen.vehiclelogai.data.models.EventType
+import com.schortgen.vehiclelogai.data.models.ReviewItem
 import com.schortgen.vehiclelogai.data.models.calculateMpg
 import com.schortgen.vehiclelogai.data.models.extractPhotoFileName
 import com.schortgen.vehiclelogai.data.models.getPhotoPaths
@@ -41,11 +52,30 @@ import com.schortgen.vehiclelogai.data.models.toImageModel
 import com.schortgen.vehiclelogai.debug.DiagnosticLogger
 import com.schortgen.vehiclelogai.ui.events.EventViewModel
 import kotlinx.coroutines.launch
+import java.io.File
+import java.io.FileOutputStream
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 import java.util.TimeZone
+
+private fun copyUriToInternalStorage(context: android.content.Context, uri: Uri): String {
+    return try {
+        val photosDir = File(context.filesDir, "photos")
+        if (!photosDir.exists()) photosDir.mkdirs()
+        val file = File(photosDir, "event_photo_${System.currentTimeMillis()}.jpg")
+        context.contentResolver.openInputStream(uri)?.use { input ->
+            FileOutputStream(file).use { output ->
+                input.copyTo(output)
+            }
+        }
+        file.absolutePath
+    } catch (e: Exception) {
+        DiagnosticLogger.e("PhotoCopy", "Failed to copy uri $uri", e)
+        uri.toString()
+    }
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -70,7 +100,17 @@ fun EventDetailScreen(
         app?.database?.scannedPhotoDao()?.observeByEvent(eventId) ?: kotlinx.coroutines.flow.flowOf(emptyList())
     }.collectAsState(initial = emptyList())
 
-    val photoPaths = remember(event, reviewItems, scannedPhotos) {
+    val allReviewItems by (app?.reviewItemRepository?.observeAllReviewItems() ?: kotlinx.coroutines.flow.flowOf(emptyList()))
+        .collectAsState(initial = emptyList())
+
+    val unassignedReviewItems = remember(allReviewItems, eventId) {
+        allReviewItems.filter { (it.eventId == null || it.eventId <= 0L || it.eventId != eventId) && !it.photoPath.isNullOrBlank() }
+    }
+
+    // Editable list of photos during editing mode
+    val editablePhotoPaths = remember { mutableStateListOf<String>() }
+
+    val basePhotoPaths = remember(event, reviewItems, scannedPhotos) {
         val list = mutableListOf<String>()
         reviewItems.forEach { item ->
             val path = item.photoPath
@@ -97,6 +137,28 @@ fun EventDetailScreen(
             }
         }
         list
+    }
+
+    val photoPaths = if (isEditing) editablePhotoPaths.toList() else basePhotoPaths
+
+    var showAddPhotoDialog by remember { mutableStateOf(false) }
+    val selectedGalleryPaths = remember { mutableStateListOf<String>() }
+    val selectedUngroupedItems = remember { mutableStateListOf<ReviewItem>() }
+
+    val photoPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetMultipleContents()
+    ) { uris: List<Uri> ->
+        uris.forEach { uri ->
+            val localPath = copyUriToInternalStorage(context, uri)
+            if (localPath !in selectedGalleryPaths) {
+                selectedGalleryPaths.add(localPath)
+            }
+        }
+    }
+
+    fun syncEditablePhotos() {
+        editablePhotoPaths.clear()
+        editablePhotoPaths.addAll(basePhotoPaths)
     }
 
     // Editable fields
@@ -200,6 +262,7 @@ fun EventDetailScreen(
             editTotalCost = e.totalCost?.toString() ?: ""
             editLocation = e.location ?: ""
             selectedDateMillis = e.eventDate
+            syncEditablePhotos()
         }
     }
 
@@ -215,11 +278,17 @@ fun EventDetailScreen(
                 actions = {
                     if (event != null) {
                         if (isEditing) {
-                            TextButton(onClick = { isEditing = false }) {
+                            TextButton(onClick = { 
+                                isEditing = false 
+                                syncEditablePhotos()
+                            }) {
                                 Text("Cancel")
                             }
                         } else {
-                            TextButton(onClick = { isEditing = true }) {
+                            TextButton(onClick = { 
+                                syncEditablePhotos()
+                                isEditing = true 
+                            }) {
                                 Text("Edit")
                             }
                         }
@@ -399,6 +468,112 @@ fun EventDetailScreen(
                                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                                     singleLine = true,
                                     modifier = Modifier.fillMaxWidth()
+                                )
+                            }
+
+                            Spacer(modifier = Modifier.height(16.dp))
+                            HorizontalDivider()
+                            Spacer(modifier = Modifier.height(12.dp))
+
+                            // Attached Photos header & Add Photo button
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column {
+                                    Text(
+                                        text = "Attached Photos",
+                                        style = MaterialTheme.typography.titleSmall,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    Text(
+                                        text = "${editablePhotoPaths.size} photo(s)",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                                Button(
+                                    onClick = {
+                                        selectedGalleryPaths.clear()
+                                        selectedUngroupedItems.clear()
+                                        showAddPhotoDialog = true
+                                    },
+                                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Add,
+                                        contentDescription = "Add Photo",
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text("Add Photo")
+                                }
+                            }
+
+                            if (editablePhotoPaths.isNotEmpty()) {
+                                Spacer(modifier = Modifier.height(12.dp))
+                                LazyRow(
+                                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    itemsIndexed(editablePhotoPaths) { index, path ->
+                                        Box(modifier = Modifier.size(110.dp)) {
+                                            val model = ImageRequest.Builder(context)
+                                                .data(path.toImageModel(context))
+                                                .crossfade(true)
+                                                .build()
+
+                                            Surface(
+                                                modifier = Modifier
+                                                    .fillMaxSize()
+                                                    .clip(RoundedCornerShape(8.dp))
+                                                    .clickable {
+                                                        selectedPhotoIndex = index
+                                                        showImageDialog = true
+                                                    },
+                                                color = MaterialTheme.colorScheme.surfaceVariant,
+                                                shape = RoundedCornerShape(8.dp)
+                                            ) {
+                                                AsyncImage(
+                                                    model = model,
+                                                    contentDescription = "Event photo ${index + 1}",
+                                                    placeholder = painterResource(id = android.R.drawable.ic_menu_report_image),
+                                                    error = painterResource(id = android.R.drawable.ic_dialog_alert),
+                                                    contentScale = ContentScale.Crop,
+                                                    modifier = Modifier.fillMaxSize()
+                                                )
+                                            }
+
+                                            IconButton(
+                                                onClick = {
+                                                    editablePhotoPaths.removeAt(index)
+                                                },
+                                                modifier = Modifier
+                                                    .align(Alignment.TopEnd)
+                                                    .padding(2.dp)
+                                                    .size(24.dp)
+                                                    .background(
+                                                        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.85f),
+                                                        shape = CircleShape
+                                                    )
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Default.Close,
+                                                    contentDescription = "Remove photo",
+                                                    modifier = Modifier.size(14.dp),
+                                                    tint = MaterialTheme.colorScheme.error
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            } else {
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Text(
+                                    text = "No photos attached. Tap 'Add Photo' to attach receipts or images.",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
                         } else {
@@ -649,6 +824,12 @@ fun EventDetailScreen(
                         Column(modifier = Modifier.padding(16.dp)) {
                             Button(
                                 onClick = {
+                                    val updatedPhotos = editablePhotoPaths.toList()
+                                    val photoPathValue = when {
+                                        updatedPhotos.isEmpty() -> null
+                                        updatedPhotos.size == 1 -> updatedPhotos.first()
+                                        else -> "[${updatedPhotos.joinToString(",")}]"
+                                    }
                                     val updated = ev.copy(
                                         eventDate = selectedDateMillis,
                                         notes = editNotes.ifBlank { null },
@@ -657,7 +838,8 @@ fun EventDetailScreen(
                                         gallons = if (ev.eventType == EventType.FUEL) editGallons.toDoubleOrNull() ?: ev.gallons else ev.gallons,
                                         pricePerGallon = editPricePerGallon.toDoubleOrNull() ?: ev.pricePerGallon,
                                         totalCost = editTotalCost.toDoubleOrNull() ?: ev.totalCost,
-                                        location = editLocation.ifBlank { null }
+                                        location = editLocation.ifBlank { null },
+                                        photoPath = photoPathValue
                                     )
                                     saveUpdatedEvent(updated)
                                 },
@@ -682,6 +864,222 @@ fun EventDetailScreen(
                     }
                 }
             }
+        }
+
+        if (showAddPhotoDialog) {
+            AlertDialog(
+                onDismissRequest = {
+                    showAddPhotoDialog = false
+                    selectedGalleryPaths.clear()
+                    selectedUngroupedItems.clear()
+                },
+                title = {
+                    Text("Add Photos to Event", style = MaterialTheme.typography.titleLarge)
+                },
+                text = {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .verticalScroll(rememberScrollState()),
+                        verticalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
+                        // Section 1: Pick from Device / Gallery
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = CardDefaults.cardColors(
+                                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                            )
+                        ) {
+                            Column(modifier = Modifier.padding(12.dp)) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = "From Device / Gallery",
+                                        style = MaterialTheme.typography.titleSmall,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    FilledTonalButton(
+                                        onClick = {
+                                            photoPickerLauncher.launch("image/*")
+                                        },
+                                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.PhotoLibrary,
+                                            contentDescription = "Browse",
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text("Browse")
+                                    }
+                                }
+
+                                if (selectedGalleryPaths.isNotEmpty()) {
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    Text(
+                                        text = "${selectedGalleryPaths.size} photo(s) selected from gallery:",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        fontWeight = FontWeight.Medium
+                                    )
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    LazyRow(
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        items(selectedGalleryPaths) { path ->
+                                            Box(modifier = Modifier.size(64.dp)) {
+                                                AsyncImage(
+                                                    model = ImageRequest.Builder(context)
+                                                        .data(path.toImageModel(context))
+                                                        .crossfade(true)
+                                                        .build(),
+                                                    contentDescription = "Selected Gallery Image",
+                                                    contentScale = ContentScale.Crop,
+                                                    modifier = Modifier
+                                                        .fillMaxSize()
+                                                        .clip(RoundedCornerShape(6.dp))
+                                                )
+                                                IconButton(
+                                                    onClick = { selectedGalleryPaths.remove(path) },
+                                                    modifier = Modifier
+                                                        .align(Alignment.TopEnd)
+                                                        .size(18.dp)
+                                                        .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.8f), CircleShape)
+                                                ) {
+                                                    Icon(
+                                                        Icons.Default.Close,
+                                                        contentDescription = "Remove",
+                                                        modifier = Modifier.size(12.dp),
+                                                        tint = MaterialTheme.colorScheme.error
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        // Section 2: Pick from Unassigned Scanned Photos / Review Queue
+                        if (unassignedReviewItems.isNotEmpty()) {
+                            Card(
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = CardDefaults.cardColors(
+                                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                                )
+                            ) {
+                                Column(modifier = Modifier.padding(12.dp)) {
+                                    Text(
+                                        text = "From Unassigned Scans (${unassignedReviewItems.size})",
+                                        style = MaterialTheme.typography.titleSmall,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Text(
+                                        text = "Tap to select scanned photos to attach to this event:",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                    Spacer(modifier = Modifier.height(8.dp))
+
+                                    LazyRow(
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        items(unassignedReviewItems) { item ->
+                                            val isSelected = item in selectedUngroupedItems
+                                            val itemPhotoPath = item.photoPath ?: ""
+
+                                            Surface(
+                                                modifier = Modifier
+                                                    .size(72.dp)
+                                                    .clip(RoundedCornerShape(8.dp))
+                                                    .clickable {
+                                                        if (isSelected) {
+                                                            selectedUngroupedItems.remove(item)
+                                                        } else {
+                                                            selectedUngroupedItems.add(item)
+                                                        }
+                                                    },
+                                                shape = RoundedCornerShape(8.dp),
+                                                border = if (isSelected) BorderStroke(3.dp, MaterialTheme.colorScheme.primary) else BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                                                color = MaterialTheme.colorScheme.surfaceVariant
+                                            ) {
+                                                Box(modifier = Modifier.fillMaxSize()) {
+                                                    AsyncImage(
+                                                        model = ImageRequest.Builder(context)
+                                                            .data(itemPhotoPath.toImageModel(context))
+                                                            .crossfade(true)
+                                                            .build(),
+                                                        contentDescription = "Review Item ${item.id}",
+                                                        contentScale = ContentScale.Crop,
+                                                        modifier = Modifier.fillMaxSize()
+                                                    )
+                                                    if (isSelected) {
+                                                        Box(
+                                                            modifier = Modifier
+                                                                .fillMaxSize()
+                                                                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.35f)),
+                                                            contentAlignment = Alignment.Center
+                                                        ) {
+                                                            Text("✓", color = Color.White, fontWeight = FontWeight.Bold)
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                },
+                confirmButton = {
+                    val totalSelected = selectedGalleryPaths.size + selectedUngroupedItems.size
+                    Button(
+                        onClick = {
+                            // Add gallery paths to editable paths
+                            selectedGalleryPaths.forEach { p ->
+                                if (p !in editablePhotoPaths) {
+                                    editablePhotoPaths.add(p)
+                                }
+                            }
+                            // Add ungrouped review items photo paths
+                            selectedUngroupedItems.forEach { item ->
+                                val p = item.photoPath
+                                if (!p.isNullOrBlank()) {
+                                    val clean = p.trim().removePrefix("[").removeSuffix("]").replace("\"", "").replace("'", "")
+                                    clean.split(',', '|', '\n', ';').map { it.trim() }.filter { it.isNotBlank() }.forEach { singlePath ->
+                                        if (singlePath !in editablePhotoPaths) {
+                                            editablePhotoPaths.add(singlePath)
+                                        }
+                                    }
+                                }
+                            }
+                            showAddPhotoDialog = false
+                            selectedGalleryPaths.clear()
+                            selectedUngroupedItems.clear()
+                        },
+                        enabled = totalSelected > 0
+                    ) {
+                        Text(if (totalSelected > 0) "Add $totalSelected Photo(s)" else "Add Selected")
+                    }
+                },
+                dismissButton = {
+                    TextButton(
+                        onClick = {
+                            showAddPhotoDialog = false
+                            selectedGalleryPaths.clear()
+                            selectedUngroupedItems.clear()
+                        }
+                    ) {
+                        Text("Cancel")
+                    }
+                }
+            )
         }
 
         if (showImageDialog && photoPaths.isNotEmpty()) {
