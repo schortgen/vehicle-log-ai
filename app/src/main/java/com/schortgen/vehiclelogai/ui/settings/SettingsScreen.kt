@@ -46,6 +46,8 @@ fun SettingsScreen(
     val isScanningBackups by viewModel.isScanningBackups.collectAsState()
     val isMigratingPhotos by viewModel.isMigratingPhotos.collectAsState()
     val migrationStatusMessage by viewModel.migrationStatusMessage.collectAsState()
+    val isRelinkingPhotos by viewModel.isRelinkingPhotos.collectAsState()
+    val relinkReport by viewModel.relinkReport.collectAsState()
 
     var pendingRestoreUri by remember { mutableStateOf<Uri?>(null) }
     var showRestorePickerDialog by remember { mutableStateOf(false) }
@@ -84,11 +86,31 @@ fun SettingsScreen(
         }
     }
 
-    val exportLauncher = rememberLauncherForActivityResult(
+    val relinkFolderPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocumentTree()
+    ) { uri: Uri? ->
+        if (uri != null) {
+            val flags = Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+            try {
+                context.contentResolver.takePersistableUriPermission(uri, flags)
+            } catch (_: Exception) {}
+            viewModel.relinkPhotos(context, customFolderTreeUri = uri)
+        }
+    }
+
+    val exportJsonLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.CreateDocument("application/json")
     ) { uri ->
         if (uri != null) {
             viewModel.exportBackup(context, uri)
+        }
+    }
+
+    val exportZipLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.CreateDocument("application/zip")
+    ) { uri ->
+        if (uri != null) {
+            viewModel.exportZipBackup(context, uri)
         }
     }
 
@@ -138,11 +160,11 @@ fun SettingsScreen(
                     ) {
                         Icon(
                             imageVector = Icons.Default.DirectionsCar,
-                            contentDescription = "Trip Meter Icon",
+                            contentDescription = "Car Icon",
                             tint = MaterialTheme.colorScheme.primary
                         )
                         Text(
-                            text = "Preferred Trip Meter",
+                            text = "Trip Meter Preference",
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold
                         )
@@ -151,97 +173,41 @@ fun SettingsScreen(
                     Spacer(modifier = Modifier.height(8.dp))
 
                     Text(
-                        text = "Select which trip meter reading to use when creating odometer events from photos that show both Trip A and Trip B.",
+                        text = "Choose which trip meter should be selected by default when both Trip A and Trip B are detected on dashboard photos.",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
 
                     Spacer(modifier = Modifier.height(12.dp))
 
-                    // Option: Trip A
                     Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { viewModel.updatePreferredTripMeter(PreferredTripMeter.TRIP_A) }
-                            .padding(vertical = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        RadioButton(
+                        FilterChip(
                             selected = preferredTripMeter == PreferredTripMeter.TRIP_A,
-                            onClick = { viewModel.updatePreferredTripMeter(PreferredTripMeter.TRIP_A) }
+                            onClick = { viewModel.updatePreferredTripMeter(PreferredTripMeter.TRIP_A) },
+                            label = { Text("Trip A (Default)") },
+                            leadingIcon = if (preferredTripMeter == PreferredTripMeter.TRIP_A) {
+                                { Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(16.dp)) }
+                            } else null,
+                            modifier = Modifier.weight(1f)
                         )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Column {
-                            Text(
-                                text = "Trip A",
-                                style = MaterialTheme.typography.bodyLarge,
-                                fontWeight = FontWeight.Medium
-                            )
-                            Text(
-                                text = "Use Trip A reading by default",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                    }
 
-                    // Option: Trip B
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { viewModel.updatePreferredTripMeter(PreferredTripMeter.TRIP_B) }
-                            .padding(vertical = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        RadioButton(
+                        FilterChip(
                             selected = preferredTripMeter == PreferredTripMeter.TRIP_B,
-                            onClick = { viewModel.updatePreferredTripMeter(PreferredTripMeter.TRIP_B) }
+                            onClick = { viewModel.updatePreferredTripMeter(PreferredTripMeter.TRIP_B) },
+                            label = { Text("Trip B") },
+                            leadingIcon = if (preferredTripMeter == PreferredTripMeter.TRIP_B) {
+                                { Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(16.dp)) }
+                            } else null,
+                            modifier = Modifier.weight(1f)
                         )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Column {
-                            Text(
-                                text = "Trip B",
-                                style = MaterialTheme.typography.bodyLarge,
-                                fontWeight = FontWeight.Medium
-                            )
-                            Text(
-                                text = "Use Trip B reading by default",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                    }
-
-                    // Option: Calculate / Odometer
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { viewModel.updatePreferredTripMeter(PreferredTripMeter.ANY) }
-                            .padding(vertical = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        RadioButton(
-                            selected = preferredTripMeter == PreferredTripMeter.ANY,
-                            onClick = { viewModel.updatePreferredTripMeter(PreferredTripMeter.ANY) }
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Column {
-                            Text(
-                                text = "Calculate / Total Odometer",
-                                style = MaterialTheme.typography.bodyLarge,
-                                fontWeight = FontWeight.Medium
-                            )
-                            Text(
-                                text = "Calculate based on vehicle odometer reading",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
                     }
                 }
             }
 
-            // Photo Management Card
+            // Photo Management & Storage Card
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
@@ -257,11 +223,11 @@ fun SettingsScreen(
                     ) {
                         Icon(
                             imageVector = Icons.Default.Folder,
-                            contentDescription = "Photo Management Icon",
+                            contentDescription = "Storage Icon",
                             tint = MaterialTheme.colorScheme.primary
                         )
                         Text(
-                            text = "Photo Management",
+                            text = "Photo Storage",
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold
                         )
@@ -270,114 +236,185 @@ fun SettingsScreen(
                     Spacer(modifier = Modifier.height(8.dp))
 
                     Text(
-                        text = "Automatically move processed photos out of your main camera roll to a dedicated folder after review is complete.",
+                        text = "Organize where verified receipts and dashboard photos are saved after events are accepted.",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
 
                     Spacer(modifier = Modifier.height(12.dp))
 
-                    // Toggle Switch
                     Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable {
-                                val newState = !movePhotosOnComplete
-                                if (newState && completedPhotosFolderUri == null) {
-                                    folderPickerLauncher.launch(null)
-                                } else {
-                                    viewModel.updateMovePhotosOnComplete(newState)
-                                }
-                            }
-                            .padding(vertical = 4.dp),
+                        modifier = Modifier.fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
                                 text = "Move completed photos",
-                                style = MaterialTheme.typography.bodyLarge,
-                                fontWeight = FontWeight.Medium
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.SemiBold
                             )
                             Text(
-                                text = if (movePhotosOnComplete) "Enabled" else "Disabled",
+                                text = if (movePhotosOnComplete) "Active - photos are moved on approval" else "Disabled - photos stay in inbox",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
                         Switch(
                             checked = movePhotosOnComplete,
-                            onCheckedChange = { isChecked ->
-                                if (isChecked && completedPhotosFolderUri == null) {
+                            onCheckedChange = { checked ->
+                                viewModel.updateMovePhotosOnComplete(checked)
+                                if (checked && completedPhotosFolderUri == null) {
                                     folderPickerLauncher.launch(null)
-                                } else {
-                                    viewModel.updateMovePhotosOnComplete(isChecked)
                                 }
                             }
                         )
                     }
 
-                    // Folder Selection (visible when enabled)
                     if (movePhotosOnComplete) {
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Divider()
-                        Spacer(modifier = Modifier.height(8.dp))
+                        Spacer(modifier = Modifier.height(12.dp))
+                        HorizontalDivider()
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        Text(
+                            text = "Target Folder",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.primary,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = completedPhotosFolderName ?: "Pictures/ProcessedVehiclePhotos",
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Medium
+                        )
+
+                        Spacer(modifier = Modifier.height(12.dp))
 
                         Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 4.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            Column(modifier = Modifier.weight(1f).padding(end = 8.dp)) {
-                                Text(
-                                    text = "Destination Folder",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    fontWeight = FontWeight.Medium
-                                )
-                                Text(
-                                    text = completedPhotosFolderName ?: "VehicleLogAI/Completed (Default)",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.primary
-                                )
-                            }
-                            Row(
-                                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                                verticalAlignment = Alignment.CenterVertically
+                            OutlinedButton(
+                                onClick = { folderPickerLauncher.launch(null) },
+                                modifier = Modifier.weight(1f)
                             ) {
-                                OutlinedButton(
-                                    onClick = { folderPickerLauncher.launch(null) },
-                                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
-                                    enabled = !isMigratingPhotos
-                                ) {
-                                    Text("Change")
-                                }
-                                Button(
-                                    onClick = { moveFolderPickerLauncher.launch(null) },
-                                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
-                                    enabled = !isMigratingPhotos
-                                ) {
+                                Icon(
+                                    imageVector = Icons.Default.FolderOpen,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("Select Folder")
+                            }
+
+                            Button(
+                                onClick = { moveFolderPickerLauncher.launch(null) },
+                                modifier = Modifier.weight(1f),
+                                enabled = !isMigratingPhotos
+                            ) {
+                                if (isMigratingPhotos) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(16.dp),
+                                        strokeWidth = 2.dp,
+                                        color = MaterialTheme.colorScheme.onPrimary
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text("Moving...")
+                                } else {
                                     Icon(
                                         imageVector = Icons.Default.DriveFileMove,
-                                        contentDescription = "Move Photos",
+                                        contentDescription = null,
                                         modifier = Modifier.size(16.dp)
                                     )
-                                    Spacer(modifier = Modifier.width(4.dp))
-                                    Text("Move")
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text("Move All Existing")
                                 }
                             }
                         }
+                    }
+                }
+            }
 
-                        if (isMigratingPhotos) {
-                            Spacer(modifier = Modifier.height(8.dp))
-                            LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
-                            Spacer(modifier = Modifier.height(4.dp))
+            // Locate & Relink Photos Card (Repair Missing/Moved Photos)
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp)
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.PhotoLibrary,
+                            contentDescription = "Relink Photos Icon",
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                        Text(
+                            text = "Locate & Relink Photos",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    Text(
+                        text = "If photos are not displaying after a backup restore, phone transfer, or folder relocation, use this tool to scan storage or choose a folder to automatically reconnect all photo links.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
+                    Spacer(modifier = Modifier.height(14.dp))
+
+                    if (isRelinkingPhotos) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.Center,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            CircularProgressIndicator(modifier = Modifier.size(22.dp))
+                            Spacer(modifier = Modifier.width(12.dp))
                             Text(
-                                text = "Moving photos and updating database timeline paths...",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.primary
+                                text = "Scanning and relinking photo paths...",
+                                style = MaterialTheme.typography.bodyMedium
                             )
+                        }
+                    } else {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Button(
+                                onClick = { viewModel.relinkPhotos(context) },
+                                modifier = Modifier.weight(1.2f)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Sync,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("Auto-Relink All")
+                            }
+
+                            OutlinedButton(
+                                onClick = { relinkFolderPickerLauncher.launch(null) },
+                                modifier = Modifier.weight(1.3f)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.FolderOpen,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("Pick Folder to Relink")
+                            }
                         }
                     }
                 }
@@ -412,12 +449,12 @@ fun SettingsScreen(
                     Spacer(modifier = Modifier.height(8.dp))
 
                     Text(
-                        text = "Export your vehicles, log events, review queue, and scanned photo records to a single JSON backup file, or restore from a previous backup.",
+                        text = "Export a full standalone archive (data + physical photo files as .ZIP) or a lightweight database file (.JSON), and restore anytime.",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
 
-                    Spacer(modifier = Modifier.height(16.dp))
+                    Spacer(modifier = Modifier.height(14.dp))
 
                     if (isBackupInProgress) {
                         Row(
@@ -428,45 +465,64 @@ fun SettingsScreen(
                             CircularProgressIndicator(modifier = Modifier.size(24.dp))
                             Spacer(modifier = Modifier.width(12.dp))
                             Text(
-                                text = "Processing backup...",
+                                text = "Processing backup / restore...",
                                 style = MaterialTheme.typography.bodyMedium
                             )
                         }
                     } else {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(12.dp)
-                        ) {
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            // Full ZIP Export Button
                             Button(
                                 onClick = {
                                     val dateStr = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
-                                    exportLauncher.launch("VehicleLogAI_Backup_$dateStr.json")
+                                    exportZipLauncher.launch("VehicleLogAI_CompleteBackup_$dateStr.zip")
                                 },
-                                modifier = Modifier.weight(1f)
+                                modifier = Modifier.fillMaxWidth()
                             ) {
                                 Icon(
-                                    imageVector = Icons.Default.Download,
+                                    imageVector = Icons.Default.Archive,
                                     contentDescription = null,
                                     modifier = Modifier.size(18.dp)
                                 )
                                 Spacer(modifier = Modifier.width(8.dp))
-                                Text("Export Backup")
+                                Text("Export Complete Backup (.ZIP with Photos)")
                             }
 
-                            OutlinedButton(
-                                onClick = {
-                                    viewModel.scanForBackupFiles(context)
-                                    showRestorePickerDialog = true
-                                },
-                                modifier = Modifier.weight(1f)
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
-                                Icon(
-                                    imageVector = Icons.Default.Upload,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(18.dp)
-                                )
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text("Restore Data")
+                                OutlinedButton(
+                                    onClick = {
+                                        val dateStr = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
+                                        exportJsonLauncher.launch("VehicleLogAI_Backup_$dateStr.json")
+                                    },
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Description,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text("Export JSON")
+                                }
+
+                                OutlinedButton(
+                                    onClick = {
+                                        viewModel.scanForBackupFiles(context)
+                                        showRestorePickerDialog = true
+                                    },
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Upload,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text("Restore Backup")
+                                }
                             }
                         }
                     }
@@ -612,6 +668,57 @@ fun SettingsScreen(
         )
     }
 
+    // Relink Report Dialog
+    relinkReport?.let { report ->
+        AlertDialog(
+            onDismissRequest = { viewModel.clearRelinkReport() },
+            icon = {
+                Icon(
+                    imageVector = if (report.isSuccess) Icons.Default.CheckCircle else Icons.Default.Error,
+                    contentDescription = null,
+                    tint = if (report.isSuccess) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
+                    modifier = Modifier.size(32.dp)
+                )
+            },
+            title = {
+                Text(
+                    text = if (report.isSuccess) "Photo Relink Complete" else "Relink Encountered Issues",
+                    fontWeight = FontWeight.Bold
+                )
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        text = "• Records checked: ${report.totalChecked}\n" +
+                                "• Successfully relinked: ${report.relinkedCount}\n" +
+                                "• Already valid: ${report.alreadyValidCount}\n" +
+                                "• Unresolved: ${report.unresolvedCount}",
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                    if (report.errorMessage != null) {
+                        Text(
+                            text = "Error: ${report.errorMessage}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error
+                        )
+                    }
+                    if (report.relinkedCount > 0) {
+                        Text(
+                            text = "All newly relinked photos are now visible in your vehicle timelines.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                Button(onClick = { viewModel.clearRelinkReport() }) {
+                    Text("OK")
+                }
+            }
+        )
+    }
+
     // Confirmation dialog before moving all photos to a new folder
     if (showMoveConfirmDialog && pendingMoveFolderUri != null && pendingMoveFolderName != null) {
         AlertDialog(
@@ -712,6 +819,8 @@ fun SettingsScreen(
                     arrayOf(
                         "*/*",
                         "application/json",
+                        "application/zip",
+                        "application/x-zip-compressed",
                         "text/json",
                         "text/plain",
                         "application/octet-stream"

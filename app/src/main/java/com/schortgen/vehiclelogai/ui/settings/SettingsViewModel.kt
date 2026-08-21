@@ -10,6 +10,7 @@ import com.schortgen.vehiclelogai.data.repository.BackupRepository
 import com.schortgen.vehiclelogai.data.repository.PreferredTripMeter
 import com.schortgen.vehiclelogai.data.repository.SettingsRepository
 import com.schortgen.vehiclelogai.service.PhotoMoverService
+import com.schortgen.vehiclelogai.service.RelinkReport
 import com.schortgen.vehiclelogai.util.BackupFileItem
 import com.schortgen.vehiclelogai.util.BackupFileScanner
 import kotlinx.coroutines.Dispatchers
@@ -49,6 +50,12 @@ class SettingsViewModel(
 
     private val _migrationStatusMessage = MutableStateFlow<String?>(null)
     val migrationStatusMessage: StateFlow<String?> = _migrationStatusMessage.asStateFlow()
+
+    private val _isRelinkingPhotos = MutableStateFlow(false)
+    val isRelinkingPhotos: StateFlow<Boolean> = _isRelinkingPhotos.asStateFlow()
+
+    private val _relinkReport = MutableStateFlow<RelinkReport?>(null)
+    val relinkReport: StateFlow<RelinkReport?> = _relinkReport.asStateFlow()
 
     fun moveAllPhotosToNewFolder(newFolderTreeUri: Uri, newFolderName: String) {
         val mover = photoMoverService
@@ -121,10 +128,27 @@ class SettingsViewModel(
             _isBackupInProgress.value = false
             result.fold(
                 onSuccess = { data ->
-                    _backupStatusMessage.value = "Backup created successfully!\n\nVehicles: ${data.vehicles.size}\nEvents: ${data.events.size}\nReview Queue Items: ${data.reviewItems.size}\nScanned Photos: ${data.scannedPhotos.size}"
+                    _backupStatusMessage.value = "JSON Database Backup created successfully!\n\nVehicles: ${data.vehicles.size}\nEvents: ${data.events.size}\nReview Queue Items: ${data.reviewItems.size}\nScanned Photos: ${data.scannedPhotos.size}"
                 },
                 onFailure = { error ->
                     _backupStatusMessage.value = "Backup export failed: ${error.localizedMessage ?: "Unknown error"}"
+                }
+            )
+        }
+    }
+
+    fun exportZipBackup(context: Context, uri: Uri) {
+        viewModelScope.launch {
+            _isBackupInProgress.value = true
+            _backupStatusMessage.value = null
+            val result = backupRepository.exportZipBackup(context, uri)
+            _isBackupInProgress.value = false
+            result.fold(
+                onSuccess = { data ->
+                    _backupStatusMessage.value = "Full Complete Backup (.ZIP) created successfully!\n\nAll vehicle records and physical photo files were archived.\n\nVehicles: ${data.vehicles.size}\nEvents: ${data.events.size}\nReview Queue: ${data.reviewItems.size}\nScanned Photos: ${data.scannedPhotos.size}"
+                },
+                onFailure = { error ->
+                    _backupStatusMessage.value = "Complete ZIP backup failed: ${error.localizedMessage ?: "Unknown error"}"
                 }
             )
         }
@@ -138,13 +162,27 @@ class SettingsViewModel(
             _isBackupInProgress.value = false
             result.fold(
                 onSuccess = { data ->
-                    _backupStatusMessage.value = "Backup restored successfully!\n\nRestored Records:\n• Vehicles: ${data.vehicles.size}\n• Events: ${data.events.size}\n• Review Queue Items: ${data.reviewItems.size}\n• Scanned Photos: ${data.scannedPhotos.size}"
+                    _backupStatusMessage.value = "Backup restored successfully!\n\nRestored Records:\n• Vehicles: ${data.vehicles.size}\n• Events: ${data.events.size}\n• Review Queue Items: ${data.reviewItems.size}\n• Scanned Photos: ${data.scannedPhotos.size}\n\nPhoto paths were automatically checked and relinked to active storage."
                 },
                 onFailure = { error ->
                     _backupStatusMessage.value = "Backup restore failed: ${error.localizedMessage ?: "Invalid or corrupted backup file"}"
                 }
             )
         }
+    }
+
+    fun relinkPhotos(context: Context, customFolderTreeUri: Uri? = null, customFolderPath: String? = null) {
+        viewModelScope.launch {
+            _isRelinkingPhotos.value = true
+            _relinkReport.value = null
+            val report = backupRepository.relinkPhotos(context, customFolderTreeUri, customFolderPath)
+            _isRelinkingPhotos.value = false
+            _relinkReport.value = report
+        }
+    }
+
+    fun clearRelinkReport() {
+        _relinkReport.value = null
     }
 
     fun clearStatusMessage() {

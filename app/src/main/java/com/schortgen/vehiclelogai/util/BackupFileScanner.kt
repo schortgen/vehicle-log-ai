@@ -37,9 +37,13 @@ object BackupFileScanner {
 
     fun checkIfJson(name: String, mimeType: String? = null): Boolean {
         return name.endsWith(".json", ignoreCase = true) ||
+               name.endsWith(".zip", ignoreCase = true) ||
                name.endsWith(".json.jpg", ignoreCase = true) ||
                name.contains(".json.", ignoreCase = true) ||
-               mimeType == "application/json"
+               name.contains("VehicleLogAI", ignoreCase = true) ||
+               mimeType == "application/json" ||
+               mimeType == "application/zip" ||
+               mimeType == "application/x-zip-compressed"
     }
 
     fun formatFileSize(bytes: Long): String {
