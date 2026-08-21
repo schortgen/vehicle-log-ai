@@ -194,7 +194,7 @@ fun String.toImageModel(context: Context? = null): Any {
         return directFile
     }
 
-    // 4. Extract filename and check common vehicle photo directories
+    // 4. Extract filename and check common vehicle photo directories + configured target folder
     val rawClean = trimmed.removePrefix("file://")
     val fileNames = mutableListOf<String>()
     try {
@@ -215,7 +215,10 @@ fun String.toImageModel(context: Context? = null): Any {
             context.getExternalFilesDir("ProcessedVehiclePhotos"),
             File(context.filesDir, "photos"),
             File(baseDcimDir, "Camera"),
-            basePicturesDir
+            File(basePicturesDir, "Camera"),
+            File(basePicturesDir, "Screenshots"),
+            basePicturesDir,
+            baseDcimDir
         )
 
         for (fileName in fileNames) {
@@ -229,6 +232,25 @@ fun String.toImageModel(context: Context? = null): Any {
                 }
             }
         }
+
+        // Check if app has configured custom completed folder SAF URI
+        try {
+            val app = context.applicationContext as? com.schortgen.vehiclelogai.VehicleLogAIApplication
+            val configuredUriStr = app?.settingsRepository?.getCompletedPhotosFolderUri()
+            if (!configuredUriStr.isNullOrBlank() && configuredUriStr.startsWith("content://")) {
+                val treeUri = Uri.parse(configuredUriStr)
+                val targetDir = DocumentFile.fromTreeUri(context, treeUri)
+                if (targetDir != null && targetDir.exists()) {
+                    for (fileName in fileNames) {
+                        val doc = targetDir.findFile(fileName)
+                        if (doc != null && doc.exists()) {
+                            resolvedImageModelCache[trimmed] = doc.uri
+                            return doc.uri
+                        }
+                    }
+                }
+            }
+        } catch (_: Exception) {}
     }
 
     // Fallback parsing
