@@ -77,6 +77,33 @@ fun Event.getPhotoPaths(): List<String> {
         .distinct()
 }
 
+fun String.extractPhotoFileName(context: Context? = null): String {
+    val trimmed = this.trim()
+    if (trimmed.isEmpty()) return ""
+    val rawClean = trimmed.removePrefix("file://")
+    val fileName = try {
+        val decoded = Uri.decode(rawClean)
+        decoded.substringAfterLast('/').substringAfterLast('\\').substringBefore('?').trim()
+    } catch (_: Exception) {
+        rawClean.substringAfterLast('/').substringAfterLast('\\').substringBefore('?').trim()
+    }
+    if (trimmed.startsWith("content://") && context != null && (fileName.all { it.isDigit() } || fileName.isEmpty())) {
+        try {
+            val uri = Uri.parse(trimmed)
+            context.contentResolver.query(uri, arrayOf(android.provider.OpenableColumns.DISPLAY_NAME), null, null, null)?.use { cursor ->
+                if (cursor.moveToFirst()) {
+                    val nameIndex = cursor.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
+                    if (nameIndex != -1) {
+                        val name = cursor.getString(nameIndex)
+                        if (!name.isNullOrBlank()) return name
+                    }
+                }
+            }
+        } catch (_: Exception) {}
+    }
+    return if (fileName.isNotBlank()) fileName else trimmed
+}
+
 fun String.toImageModel(context: Context? = null): Any {
     val trimmed = this.trim()
     if (trimmed.isEmpty()) return ""

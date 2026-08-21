@@ -23,6 +23,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
@@ -33,6 +34,7 @@ import com.schortgen.vehiclelogai.VehicleLogAIApplication
 import com.schortgen.vehiclelogai.data.models.Event
 import com.schortgen.vehiclelogai.data.models.EventType
 import com.schortgen.vehiclelogai.data.models.calculateMpg
+import com.schortgen.vehiclelogai.data.models.extractPhotoFileName
 import com.schortgen.vehiclelogai.data.models.getPhotoPaths
 import com.schortgen.vehiclelogai.data.models.toImageModel
 import com.schortgen.vehiclelogai.debug.DiagnosticLogger
@@ -523,6 +525,63 @@ fun EventDetailScreen(
                                         }
                                     }
                                 }
+
+                                Spacer(modifier = Modifier.height(12.dp))
+                                Text(
+                                    text = if (photoPaths.size == 1) "Grouped Photo File:" else "Grouped Photo Files (${photoPaths.size}):",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                Spacer(modifier = Modifier.height(6.dp))
+                                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    photoPaths.forEachIndexed { index, path ->
+                                        val fileName = path.extractPhotoFileName(context)
+                                        Surface(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .clip(RoundedCornerShape(8.dp))
+                                                .clickable {
+                                                    selectedPhotoIndex = index
+                                                    showImageDialog = true
+                                                },
+                                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                                            shape = RoundedCornerShape(8.dp)
+                                        ) {
+                                            Row(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                            ) {
+                                                Text(
+                                                    text = "📷",
+                                                    style = MaterialTheme.typography.bodySmall
+                                                )
+                                                Text(
+                                                    text = fileName,
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                    fontWeight = FontWeight.Medium,
+                                                    maxLines = 1,
+                                                    overflow = TextOverflow.Ellipsis,
+                                                    modifier = Modifier.weight(1f)
+                                                )
+                                                Surface(
+                                                    color = MaterialTheme.colorScheme.primaryContainer,
+                                                    shape = RoundedCornerShape(4.dp)
+                                                ) {
+                                                    Text(
+                                                        text = "Photo #${index + 1}",
+                                                        style = MaterialTheme.typography.labelSmall,
+                                                        color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
@@ -658,20 +717,25 @@ fun EventDetailScreen(
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            if (photoPaths.size > 1) {
-                                Surface(
-                                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.85f),
-                                    shape = RoundedCornerShape(16.dp)
-                                ) {
-                                    Text(
-                                        text = "Photo ${safeIndex + 1} of ${photoPaths.size}",
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        fontWeight = FontWeight.Medium,
-                                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
-                                    )
+                            Surface(
+                                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.85f),
+                                shape = RoundedCornerShape(16.dp),
+                                modifier = Modifier.weight(1f, fill = false).padding(end = 8.dp)
+                            ) {
+                                val currentFileName = photoPath.extractPhotoFileName(context)
+                                val headerText = if (photoPaths.size > 1) {
+                                    "Photo ${safeIndex + 1} of ${photoPaths.size}: $currentFileName"
+                                } else {
+                                    currentFileName
                                 }
-                            } else {
-                                Spacer(modifier = Modifier.weight(1f))
+                                Text(
+                                    text = headerText,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.Medium,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                                )
                             }
 
                             IconButton(
