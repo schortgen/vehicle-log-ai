@@ -27,6 +27,10 @@ class EventRepository(
         eventDao.deleteUnverifiedEvents()
     }
 
+    suspend fun verifyOrphanedManualEvents(): Int {
+        return eventDao.verifyOrphanedManualEvents()
+    }
+
     suspend fun getEventById(id: Long): Event? {
         return eventDao.getById(id)
     }

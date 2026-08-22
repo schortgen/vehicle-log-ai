@@ -194,7 +194,7 @@ fun NavGraph(
             arguments = listOf(navArgument("vehicleId") { type = NavType.LongType })
         ) { backStackEntry ->
             val vehicleId = backStackEntry.arguments?.getLong("vehicleId") ?: -1L
-            FuelEntryScreen(navController, eventViewModel, vehicleId)
+            FuelEntryScreen(navController, eventViewModel, vehicleViewModel, vehicleId)
         }
 
         composable(

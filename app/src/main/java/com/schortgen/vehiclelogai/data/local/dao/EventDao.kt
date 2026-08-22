@@ -72,6 +72,9 @@ interface EventDao {
     @Query("DELETE FROM events WHERE verified = 0")
     suspend fun deleteUnverifiedEvents()
 
+    @Query("UPDATE events SET verified = 1 WHERE verified = 0 AND id NOT IN (SELECT DISTINCT eventId FROM review_items WHERE eventId IS NOT NULL)")
+    suspend fun verifyOrphanedManualEvents(): Int
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertAll(events: List<Event>)
 }

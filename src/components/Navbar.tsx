@@ -100,7 +100,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               }`}
             >
               <Fuel className="w-4 h-4 text-amber-400" />
-              <span>Log Fuel</span>
+              <span>Add Event</span>
             </button>
 
             <button
@@ -186,7 +186,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               currentTab === 'fuel-entry' ? 'bg-blue-600 text-white' : 'text-slate-300 hover:bg-slate-800'
             }`}
           >
-            Log Fuel
+            Add Event
           </button>
           <button
             onClick={() => setCurrentTab('events')}

@@ -108,8 +108,9 @@ class VehicleLogAIApplication : Application(), ImageLoaderFactory {
             val start = System.nanoTime()
             try {
                 database.vehicleDao().getById(-1)
+                val recovered = database.eventDao().verifyOrphanedManualEvents()
                 val elapsedMs = (System.nanoTime() - start) / 1_000_000
-                DiagnosticLogger.d("App", "vehicle DAO warm-up ok in ${elapsedMs}ms")
+                DiagnosticLogger.d("App", "vehicle DAO warm-up ok in ${elapsedMs}ms, recovered $recovered orphaned manual event(s)")
             } catch (t: Throwable) {
                 DiagnosticLogger.e("App", "vehicle DAO warm-up failed", t)
             }

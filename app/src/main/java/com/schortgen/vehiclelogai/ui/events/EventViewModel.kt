@@ -28,9 +28,10 @@ class EventViewModel(
 
     fun addEvent(event: Event) {
         viewModelScope.launch {
-            repository.insertEvent(event)
-            val odo = event.odometer
-            val vehId = event.vehicleId
+            val toSave = if (!event.verified) event.copy(verified = true) else event
+            repository.insertEvent(toSave)
+            val odo = toSave.odometer
+            val vehId = toSave.vehicleId
             if (odo != null && vehId != null && vehicleRepository != null) {
                 val vehicle = vehicleRepository.getVehicleById(vehId)
                 if (vehicle != null && odo > (vehicle.currentMileage ?: 0)) {
