@@ -21,6 +21,8 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material3.*
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -61,11 +63,11 @@ fun FuelEntryScreen(
     val app = context.applicationContext as? VehicleLogAIApplication
 
     // Collect vehicles
-    val vehicles by if (vehicleViewModel != null) {
-        vehicleViewModel.observeAllVehicles().collectAsState(initial = emptyList())
+    val vehicles: List<Vehicle> by if (vehicleViewModel != null) {
+        vehicleViewModel.vehicles.collectAsState()
     } else {
         app?.vehicleRepository?.observeAllVehicles()?.collectAsState(initial = emptyList())
-            ?: remember { mutableStateOf(emptyList<Vehicle>()) }
+            ?: remember { mutableStateOf(emptyList()) }
     }
 
     var selectedVehicleId by remember(vehicleId, vehicles) {
