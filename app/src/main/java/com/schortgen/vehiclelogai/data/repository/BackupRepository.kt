@@ -11,6 +11,7 @@ import com.schortgen.vehiclelogai.data.local.VehicleLogDatabase
 import com.schortgen.vehiclelogai.data.models.BackupData
 import com.schortgen.vehiclelogai.data.models.BackupSettings
 import com.schortgen.vehiclelogai.data.models.clearImageModelCache
+import com.schortgen.vehiclelogai.data.models.toImageModel
 import com.schortgen.vehiclelogai.debug.DiagnosticLogger
 import com.schortgen.vehiclelogai.service.PhotoPathRelinker
 import com.schortgen.vehiclelogai.service.RelinkReport
