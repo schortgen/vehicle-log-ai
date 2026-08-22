@@ -31,6 +31,7 @@ import com.schortgen.vehiclelogai.data.models.ReviewItem
 import com.schortgen.vehiclelogai.data.models.ScannedPhoto
 import com.schortgen.vehiclelogai.data.models.calculateMpg
 import com.schortgen.vehiclelogai.data.models.getPhotoPaths
+import com.schortgen.vehiclelogai.data.models.resolveAllDisplayPhotoPaths
 import com.schortgen.vehiclelogai.data.models.toImageModel
 import com.schortgen.vehiclelogai.navigation.Screen
 import com.schortgen.vehiclelogai.ui.events.EventViewModel
@@ -427,36 +428,15 @@ private fun TimelineEventCard(
                     }
                 }
 
-                val photoPaths = remember(event.photoPath, eventReviewItems.size, eventScannedPhotos.size) {
-                    val list = mutableListOf<String>()
-                    eventReviewItems.forEach { item ->
-                        val path = item.photoPath
-                        if (!path.isNullOrBlank()) {
-                            val clean = path.trim().removePrefix("[").removeSuffix("]").replace("\"", "").replace("'", "")
-                            clean.split(',', '|', '\n', ';').map { it.trim() }.filter { it.isNotBlank() }.forEach { p ->
-                                if (!list.contains(p)) list.add(p)
-                            }
-                        }
-                    }
-                    eventScannedPhotos.forEach { sp ->
-                        val uri = sp.uri
-                        if (uri.isNotBlank()) {
-                            val clean = uri.trim().removePrefix("[").removeSuffix("]").replace("\"", "").replace("'", "")
-                            clean.split(',', '|', '\n', ';').map { it.trim() }.filter { it.isNotBlank() }.forEach { u ->
-                                if (!list.contains(u)) list.add(u)
-                            }
-                        }
-                    }
-                    event.getPhotoPaths().forEach { sp ->
-                        val trimmed = sp.trim()
-                        if (trimmed.isNotBlank() && !list.contains(trimmed)) {
-                            list.add(trimmed)
-                        }
-                    }
-                    list
+                val currentCtx = LocalContext.current
+                val photoPaths = remember(event, eventReviewItems, eventScannedPhotos) {
+                    event.resolveAllDisplayPhotoPaths(
+                        reviewItems = eventReviewItems,
+                        scannedPhotos = eventScannedPhotos,
+                        context = currentCtx
+                    )
                 }
                 if (photoPaths.isNotEmpty()) {
-                    val currentCtx = LocalContext.current
                     Spacer(modifier = Modifier.height(8.dp))
                     Row(
                         verticalAlignment = Alignment.CenterVertically,

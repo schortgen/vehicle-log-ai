@@ -16,6 +16,7 @@ import com.schortgen.vehiclelogai.data.models.EventType
 import com.schortgen.vehiclelogai.data.models.ProcessingStatus
 import com.schortgen.vehiclelogai.data.models.ReviewItem
 import com.schortgen.vehiclelogai.data.models.getPhotoPaths
+import com.schortgen.vehiclelogai.data.models.resolveAllDisplayPhotoPaths
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.ui.platform.LocalContext
 import com.schortgen.vehiclelogai.data.models.toImageModel
@@ -260,21 +261,12 @@ private fun GroupedEventCard(
     onClick: () -> Unit,
     onDelete: () -> Unit
 ) {
+    val context = LocalContext.current
     val allPhotos = remember(event, items) {
-        val list = mutableListOf<String>()
-        items.forEach { item ->
-            val p = item.photoPath
-            if (!p.isNullOrBlank() && !list.contains(p.trim())) {
-                list.add(p.trim())
-            }
-        }
-        event.getPhotoPaths().forEach { p ->
-            val trimmed = p.trim()
-            if (trimmed.isNotBlank() && !list.contains(trimmed)) {
-                list.add(trimmed)
-            }
-        }
-        list
+        event.resolveAllDisplayPhotoPaths(
+            reviewItems = items,
+            context = context
+        )
     }
 
     Card(

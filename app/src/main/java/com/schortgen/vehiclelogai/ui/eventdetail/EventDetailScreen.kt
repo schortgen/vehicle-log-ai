@@ -48,6 +48,7 @@ import com.schortgen.vehiclelogai.data.models.calculateMpg
 import com.schortgen.vehiclelogai.data.models.extractPhotoFileName
 import com.schortgen.vehiclelogai.data.models.getPhotoPaths
 import com.schortgen.vehiclelogai.data.models.getPhotoStatusInfo
+import com.schortgen.vehiclelogai.data.models.resolveAllDisplayPhotoPaths
 import com.schortgen.vehiclelogai.data.models.toImageModel
 import com.schortgen.vehiclelogai.debug.DiagnosticLogger
 import com.schortgen.vehiclelogai.ui.events.EventViewModel
@@ -111,32 +112,11 @@ fun EventDetailScreen(
     val editablePhotoPaths = remember { mutableStateListOf<String>() }
 
     val basePhotoPaths = remember(event, reviewItems, scannedPhotos) {
-        val list = mutableListOf<String>()
-        reviewItems.forEach { item ->
-            val path = item.photoPath
-            if (!path.isNullOrBlank()) {
-                val clean = path.trim().removePrefix("[").removeSuffix("]").replace("\"", "").replace("'", "")
-                clean.split(',', '|', '\n', ';').map { it.trim() }.filter { it.isNotBlank() }.forEach { p ->
-                    if (!list.contains(p)) list.add(p)
-                }
-            }
-        }
-        scannedPhotos.forEach { sp ->
-            val uri = sp.uri
-            if (uri.isNotBlank()) {
-                val clean = uri.trim().removePrefix("[").removeSuffix("]").replace("\"", "").replace("'", "")
-                clean.split(',', '|', '\n', ';').map { it.trim() }.filter { it.isNotBlank() }.forEach { u ->
-                    if (!list.contains(u)) list.add(u)
-                }
-            }
-        }
-        event?.getPhotoPaths()?.forEach { sp ->
-            val trimmed = sp.trim()
-            if (trimmed.isNotBlank() && !list.contains(trimmed)) {
-                list.add(trimmed)
-            }
-        }
-        list
+        event?.resolveAllDisplayPhotoPaths(
+            reviewItems = reviewItems,
+            scannedPhotos = scannedPhotos,
+            context = context
+        ) ?: emptyList()
     }
 
     val photoPaths = if (isEditing) editablePhotoPaths.toList() else basePhotoPaths

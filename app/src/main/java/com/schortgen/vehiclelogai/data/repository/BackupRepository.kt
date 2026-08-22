@@ -261,16 +261,25 @@ class BackupRepository(
                 if (!entry.isDirectory) {
                     if (entryName.equals("backup_data.json", ignoreCase = true) || entryName.endsWith(".json", ignoreCase = true)) {
                         backupJsonString = zipIn.bufferedReader(Charsets.UTF_8).readText()
-                    } else if (entryName.startsWith("photos/") || entryName.endsWith(".jpg", ignoreCase = true) || entryName.endsWith(".jpeg", ignoreCase = true) || entryName.endsWith(".png", ignoreCase = true)) {
+                    } else if (entryName.startsWith("photos/") || entryName.endsWith(".jpg", ignoreCase = true) || entryName.endsWith(".jpeg", ignoreCase = true) || entryName.endsWith(".png", ignoreCase = true) || entryName.endsWith(".webp", ignoreCase = true)) {
                         val fileName = File(entryName).name
                         val destFile = File(targetDir, fileName)
-                        FileOutputStream(destFile).use { out ->
-                            var len: Int
-                            while (zipIn.read(buffer).also { len = it } > 0) {
-                                out.write(buffer, 0, len)
+                        try {
+                            FileOutputStream(destFile).use { out ->
+                                var len: Int
+                                while (zipIn.read(buffer).also { len = it } > 0) {
+                                    out.write(buffer, 0, len)
+                                }
                             }
+                            extractedPhotosMap[fileName.lowercase()] = destFile.absolutePath
+                            // Also map name without extension in case it's referenced by ID/base
+                            val baseName = fileName.substringBeforeLast(".")
+                            if (baseName.isNotEmpty()) {
+                                extractedPhotosMap[baseName.lowercase()] = destFile.absolutePath
+                            }
+                        } catch (e: Exception) {
+                            DiagnosticLogger.w("BackupRepository", "Failed to write extracted photo: $fileName", e)
                         }
-                        extractedPhotosMap[fileName.lowercase()] = destFile.absolutePath
                     }
                 }
                 zipIn.closeEntry()
@@ -289,7 +298,7 @@ class BackupRepository(
         val updatedEvents = rawBackupData.events.map { event ->
             val p = event.photoPath
             if (!p.isNullOrBlank()) {
-                val updatedPath = mapExtractedPhotoPath(p, extractedPhotosMap)
+                val updatedPath = mapExtractedPhotoPath(p, extractedPhotosMap, context)
                 event.copy(photoPath = updatedPath)
             } else event
         }
@@ -297,14 +306,17 @@ class BackupRepository(
         val updatedReviewItems = rawBackupData.reviewItems.map { item ->
             val p = item.photoPath
             if (!p.isNullOrBlank()) {
-                val updatedPath = mapExtractedPhotoPath(p, extractedPhotosMap)
+                val updatedPath = mapExtractedPhotoPath(p, extractedPhotosMap, context)
                 item.copy(photoPath = updatedPath)
             } else item
         }
 
         val updatedScannedPhotos = rawBackupData.scannedPhotos.map { sp ->
-            if (sp.uri.isNotBlank()) {
-                val updatedPath = mapExtractedPhotoPath(sp.uri, extractedPhotosMap)
+            val mappedByDisplayName = if (sp.displayName.isNotBlank()) extractedPhotosMap[sp.displayName.lowercase()] else null
+            if (mappedByDisplayName != null) {
+                sp.copy(uri = mappedByDisplayName)
+            } else if (sp.uri.isNotBlank()) {
+                val updatedPath = mapExtractedPhotoPath(sp.uri, extractedPhotosMap, context)
                 sp.copy(uri = updatedPath)
             } else sp
         }
@@ -321,7 +333,7 @@ class BackupRepository(
         return finalBackupData
     }
 
-    private fun mapExtractedPhotoPath(originalPath: String, extractedMap: Map<String, String>): String {
+    private fun mapExtractedPhotoPath(originalPath: String, extractedMap: Map<String, String>, context: Context? = null): String {
         val trimmed = originalPath.trim()
         if (trimmed.isEmpty()) return originalPath
 
@@ -331,24 +343,24 @@ class BackupRepository(
                 val type = object : TypeToken<List<String>>() {}.type
                 val list: List<String> = gson.fromJson(trimmed, type)
                 val mapped = list.map { single ->
-                    mapSinglePhotoPath(single, extractedMap)
+                    mapSinglePhotoPath(single, extractedMap, context)
                 }
                 gson.toJson(mapped)
             } catch (_: Exception) {
-                mapDelimitedPhotoPaths(trimmed, extractedMap)
+                mapDelimitedPhotoPaths(trimmed, extractedMap, context)
             }
         }
 
         // 2. Multi-photo Delimited format (comma, pipe, semicolon, newline)
         if (trimmed.contains(",") || trimmed.contains("|") || trimmed.contains("\n") || trimmed.contains(";")) {
-            return mapDelimitedPhotoPaths(trimmed, extractedMap)
+            return mapDelimitedPhotoPaths(trimmed, extractedMap, context)
         }
 
         // 3. Single photo path
-        return mapSinglePhotoPath(trimmed, extractedMap)
+        return mapSinglePhotoPath(trimmed, extractedMap, context)
     }
 
-    private fun mapDelimitedPhotoPaths(delimited: String, extractedMap: Map<String, String>): String {
+    private fun mapDelimitedPhotoPaths(delimited: String, extractedMap: Map<String, String>, context: Context? = null): String {
         val delimiter = when {
             delimited.contains(",") -> ","
             delimited.contains("|") -> "|"
@@ -357,12 +369,12 @@ class BackupRepository(
         }
         val clean = delimited.removePrefix("[").removeSuffix("]").replace("\"", "").replace("'", "")
         val parts = clean.split(',', '|', '\n', ';').map { it.trim() }.filter { it.isNotBlank() }
-        val mapped = parts.map { single -> mapSinglePhotoPath(single, extractedMap) }
+        val mapped = parts.map { single -> mapSinglePhotoPath(single, extractedMap, context) }
         return mapped.joinToString(delimiter)
     }
 
-    private fun mapSinglePhotoPath(single: String, extractedMap: Map<String, String>): String {
-        val names = PhotoPathRelinker.extractCandidateFileNames(single)
+    private fun mapSinglePhotoPath(single: String, extractedMap: Map<String, String>, context: Context? = null): String {
+        val names = PhotoPathRelinker.extractCandidateFileNames(single, context)
         for (n in names) {
             val match = extractedMap[n.lowercase()]
             if (match != null) return match
@@ -418,10 +430,23 @@ class BackupRepository(
         return try {
             val clean = photoPath.trim()
             if (clean.startsWith("content://")) {
-                context.contentResolver.openInputStream(Uri.parse(clean))
+                val s = context.contentResolver.openInputStream(Uri.parse(clean))
+                if (s != null) return s
             } else {
                 val f = if (clean.startsWith("file://")) File(clean.removePrefix("file://")) else File(clean)
-                if (f.exists() && f.canRead()) f.inputStream() else null
+                if (f.exists() && f.canRead() && f.length() > 0) return f.inputStream()
+            }
+
+            // Fallback: Resolve via toImageModel
+            val model = photoPath.toImageModel(context)
+            when (model) {
+                is File -> if (model.exists() && model.canRead() && model.length() > 0) model.inputStream() else null
+                is Uri -> context.contentResolver.openInputStream(model)
+                is String -> {
+                    val f = File(model)
+                    if (f.exists() && f.canRead() && f.length() > 0) f.inputStream() else null
+                }
+                else -> null
             }
         } catch (_: Exception) {
             null

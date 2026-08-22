@@ -1,8 +1,11 @@
 package com.schortgen.vehiclelogai.data.models
 
+import android.content.ContentUris
 import android.content.Context
 import android.net.Uri
 import android.os.Environment
+import android.provider.MediaStore
+import android.provider.OpenableColumns
 import androidx.documentfile.provider.DocumentFile
 import androidx.room.Entity
 import androidx.room.ForeignKey
@@ -77,6 +80,43 @@ fun Event.getPhotoPaths(): List<String> {
         .distinct()
 }
 
+/**
+ * Aggregates and deduplicates all photo paths associated with an Event,
+ * prioritizing the Event's primary photo paths, followed by ReviewItems and ScannedPhotos.
+ */
+fun Event.resolveAllDisplayPhotoPaths(
+    reviewItems: List<ReviewItem> = emptyList(),
+    scannedPhotos: List<ScannedPhoto> = emptyList(),
+    context: Context? = null
+): List<String> {
+    val result = mutableListOf<String>()
+    val seenFileNames = mutableSetOf<String>()
+
+    fun addPathIfUnique(rawPath: String?, defaultDisplayName: String? = null) {
+        if (rawPath.isNullOrBlank()) return
+        val clean = rawPath.trim().removePrefix("[").removeSuffix("]").replace("\"", "").replace("'", "")
+        clean.split(',', '|', '\n', ';').map { it.trim() }.filter { it.isNotBlank() }.forEach { singlePath ->
+            val fileName = defaultDisplayName?.takeIf { it.isNotBlank() } ?: singlePath.extractPhotoFileName(context)
+            val key = fileName.lowercase().takeIf { it.isNotBlank() && it.contains(".") } ?: singlePath.lowercase()
+            if (!seenFileNames.contains(key)) {
+                seenFileNames.add(key)
+                result.add(singlePath)
+            }
+        }
+    }
+
+    // 1. Primary: Event's own photoPaths (these are the canonical paths stored with the event)
+    getPhotoPaths().forEach { addPathIfUnique(it) }
+
+    // 2. Review items attached to this event
+    reviewItems.forEach { addPathIfUnique(it.photoPath) }
+
+    // 3. Scanned photos attached to this event
+    scannedPhotos.forEach { addPathIfUnique(it.uri, it.displayName) }
+
+    return result
+}
+
 fun String.getPhotoStatusInfo(context: Context? = null): Triple<String, String, Boolean> {
     val trimmed = this.trim()
     if (trimmed.isEmpty()) return Triple("", "", false)
@@ -87,28 +127,14 @@ fun String.getPhotoStatusInfo(context: Context? = null): Triple<String, String, 
         return Triple(fileName, trimmed, true)
     }
 
-    // Direct File check without disk heavy tree walking
+    // Direct File check
     val cleanPath = if (trimmed.startsWith("file://")) trimmed.removePrefix("file://") else trimmed
     val directFile = File(cleanPath)
-    if (directFile.exists() && directFile.canRead()) {
+    if (directFile.exists() && directFile.canRead() && directFile.length() > 0) {
         return Triple(fileName, directFile.absolutePath, true)
     }
 
-    // Content URI quick check
-    if (trimmed.startsWith("content://")) {
-        var canRead = false
-        if (context != null) {
-            try {
-                val uri = Uri.parse(trimmed)
-                canRead = context.contentResolver.openInputStream(uri)?.use { true } ?: false
-            } catch (_: Exception) {
-                canRead = false
-            }
-        }
-        return Triple(fileName, trimmed, canRead)
-    }
-
-    // Fallback path resolution
+    // Fallback path resolution via toImageModel
     val imageModel = try { toImageModel(context) } catch (_: Exception) { cleanPath }
     var resolvedLocation = cleanPath
     var isResolved = false
@@ -116,11 +142,17 @@ fun String.getPhotoStatusInfo(context: Context? = null): Triple<String, String, 
     when (imageModel) {
         is File -> {
             resolvedLocation = imageModel.absolutePath
-            isResolved = imageModel.exists() && imageModel.canRead()
+            isResolved = imageModel.exists() && imageModel.canRead() && imageModel.length() > 0
         }
         is Uri -> {
             resolvedLocation = imageModel.toString()
-            isResolved = true
+            isResolved = if (context != null && imageModel.scheme == "content") {
+                try {
+                    context.contentResolver.openInputStream(imageModel)?.use { true } ?: false
+                } catch (_: Exception) {
+                    false
+                }
+            } else true
         }
         is String -> {
             resolvedLocation = imageModel
@@ -128,7 +160,7 @@ fun String.getPhotoStatusInfo(context: Context? = null): Triple<String, String, 
                 isResolved = true
             } else {
                 val f = File(imageModel)
-                isResolved = f.exists() && f.canRead()
+                isResolved = f.exists() && f.canRead() && f.length() > 0
             }
         }
     }
@@ -140,18 +172,20 @@ fun String.extractPhotoFileName(context: Context? = null): String {
     val trimmed = this.trim()
     if (trimmed.isEmpty()) return ""
     val rawClean = trimmed.removePrefix("file://")
-    val fileName = try {
+    var fileName = try {
         val decoded = Uri.decode(rawClean)
         decoded.substringAfterLast('/').substringAfterLast('\\').substringBefore('?').trim()
     } catch (_: Exception) {
         rawClean.substringAfterLast('/').substringAfterLast('\\').substringBefore('?').trim()
     }
-    if (trimmed.startsWith("content://") && context != null && (fileName.all { it.isDigit() } || fileName.isEmpty())) {
+
+    if (trimmed.startsWith("content://") && context != null) {
+        // 1. Try querying the URI directly
         try {
             val uri = Uri.parse(trimmed)
-            context.contentResolver.query(uri, arrayOf(android.provider.OpenableColumns.DISPLAY_NAME), null, null, null)?.use { cursor ->
+            context.contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { cursor ->
                 if (cursor.moveToFirst()) {
-                    val nameIndex = cursor.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
+                    val nameIndex = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
                     if (nameIndex != -1) {
                         val name = cursor.getString(nameIndex)
                         if (!name.isNullOrBlank()) return name
@@ -159,7 +193,33 @@ fun String.extractPhotoFileName(context: Context? = null): String {
                 }
             }
         } catch (_: Exception) {}
+
+        // 2. If it's a numeric MediaStore ID (e.g. content://media/external/images/media/12345), query MediaStore by ID
+        val numericId = if (fileName.all { it.isDigit() }) fileName.toLongOrNull() else {
+            val last = try { Uri.parse(trimmed).lastPathSegment } catch (_: Exception) { null }
+            if (last?.all { it.isDigit() } == true) last.toLongOrNull() else null
+        }
+        if (numericId != null) {
+            try {
+                context.contentResolver.query(
+                    MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
+                    arrayOf(MediaStore.Images.Media.DISPLAY_NAME, MediaStore.Images.Media.DATA),
+                    "${MediaStore.Images.Media._ID} = ?",
+                    arrayOf(numericId.toString()),
+                    null
+                )?.use { cursor ->
+                    if (cursor.moveToFirst()) {
+                        val nameIdx = cursor.getColumnIndex(MediaStore.Images.Media.DISPLAY_NAME)
+                        if (nameIdx != -1) {
+                            val name = cursor.getString(nameIdx)
+                            if (!name.isNullOrBlank()) return name
+                        }
+                    }
+                }
+            } catch (_: Exception) {}
+        }
     }
+
     return if (fileName.isNotBlank()) fileName else trimmed
 }
 
@@ -181,30 +241,43 @@ fun String.toImageModel(context: Context? = null): Any {
         return trimmed
     }
 
-    // 2. Direct Content URI
-    if (trimmed.startsWith("content://")) {
-        val uri = try { Uri.parse(trimmed) } catch (_: Exception) { null }
-        if (uri != null) {
-            resolvedImageModelCache[trimmed] = uri
-            return uri
-        }
-    }
-
-    // 3. Direct File / file:// URI
+    // 2. Direct File / file:// URI check
     val cleanPath = if (trimmed.startsWith("file://")) trimmed.removePrefix("file://") else trimmed
     val directFile = File(cleanPath)
-    if (directFile.exists() && directFile.canRead()) {
+    if (directFile.exists() && directFile.canRead() && directFile.length() > 0) {
         resolvedImageModelCache[trimmed] = directFile
         return directFile
     }
 
-    // 4. Extract filename and check user-selected folders, SAF trees, and standard photo directories
-    val rawClean = trimmed.removePrefix("file://")
+    // 3. Direct Content URI (verify accessibility first)
+    if (trimmed.startsWith("content://")) {
+        val uri = try { Uri.parse(trimmed) } catch (_: Exception) { null }
+        if (uri != null) {
+            var isAccessible = false
+            if (context != null) {
+                try {
+                    context.contentResolver.openInputStream(uri)?.use { isAccessible = true }
+                } catch (_: Exception) {
+                    isAccessible = false
+                }
+            }
+            if (isAccessible) {
+                resolvedImageModelCache[trimmed] = uri
+                return uri
+            }
+        }
+    }
+
+    // 4. Extract candidate filenames and search all storage locations
     val fileNames = mutableListOf<String>()
+    val primaryFileName = extractPhotoFileName(context)
+    if (primaryFileName.isNotBlank()) fileNames.add(primaryFileName)
+
+    val rawClean = trimmed.removePrefix("file://")
     try {
         val decoded = Uri.decode(rawClean)
         val name1 = decoded.substringAfterLast('/').substringAfterLast('\\').substringBefore('?').trim()
-        if (name1.isNotEmpty()) fileNames.add(name1)
+        if (name1.isNotEmpty() && !fileNames.contains(name1)) fileNames.add(name1)
     } catch (_: Exception) {}
     val name2 = rawClean.substringAfterLast('/').substringAfterLast('\\').substringBefore('?').trim()
     if (name2.isNotEmpty() && !fileNames.contains(name2)) fileNames.add(name2)
@@ -258,12 +331,46 @@ fun String.toImageModel(context: Context? = null): Any {
             for (dir in candidateDirs) {
                 if (dir.exists()) {
                     val candidateFile = File(dir, fileName)
-                    if (candidateFile.exists() && candidateFile.canRead()) {
+                    if (candidateFile.exists() && candidateFile.canRead() && candidateFile.length() > 0) {
                         resolvedImageModelCache[trimmed] = candidateFile
                         return candidateFile
                     }
                 }
             }
+        }
+
+        // Query MediaStore directly for any of the candidate filenames
+        for (fileName in fileNames) {
+            try {
+                context.contentResolver.query(
+                    MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
+                    arrayOf(MediaStore.Images.Media._ID, MediaStore.Images.Media.DATA),
+                    "${MediaStore.Images.Media.DISPLAY_NAME} = ?",
+                    arrayOf(fileName),
+                    null
+                )?.use { cursor ->
+                    if (cursor.moveToFirst()) {
+                        val dataIdx = cursor.getColumnIndex(MediaStore.Images.Media.DATA)
+                        if (dataIdx != -1) {
+                            val dataPath = cursor.getString(dataIdx)
+                            if (!dataPath.isNullOrBlank()) {
+                                val f = File(dataPath)
+                                if (f.exists() && f.canRead() && f.length() > 0) {
+                                    resolvedImageModelCache[trimmed] = f
+                                    return f
+                                }
+                            }
+                        }
+                        val idIdx = cursor.getColumnIndex(MediaStore.Images.Media._ID)
+                        if (idIdx != -1) {
+                            val mediaId = cursor.getLong(idIdx)
+                            val mediaUri = ContentUris.withAppendedId(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, mediaId)
+                            resolvedImageModelCache[trimmed] = mediaUri
+                            return mediaUri
+                        }
+                    }
+                }
+            } catch (_: Exception) {}
         }
 
         // Check user-configured SAF folder tree URIs and persisted URI permissions

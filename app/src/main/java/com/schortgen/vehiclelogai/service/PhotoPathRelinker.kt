@@ -127,7 +127,12 @@ object PhotoPathRelinker {
                 if (rawPath.isBlank()) continue
                 total++
 
-                val (newPath, wasFixed, isValid) = resolveAndRepairPath(context, rawPath, photoIndex)
+                val (newPath, wasFixed, isValid) = resolveSinglePath(
+                    context = context,
+                    singlePath = rawPath,
+                    photoIndex = photoIndex,
+                    fallbackName = sp.displayName
+                )
                 if (wasFixed) {
                     relinked++
                     scannedPhotosToUpdate.add(sp.copy(uri = newPath))
@@ -263,7 +268,8 @@ object PhotoPathRelinker {
     private fun resolveSinglePath(
         context: Context,
         singlePath: String,
-        photoIndex: Map<String, String>
+        photoIndex: Map<String, String>,
+        fallbackName: String? = null
     ): Triple<String, Boolean, Boolean> {
         val trimmed = singlePath.trim()
             .removePrefix("[").removeSuffix("]")
@@ -276,8 +282,17 @@ object PhotoPathRelinker {
             return Triple(trimmed, false, true)
         }
 
+        // Check fallback name (e.g. from ScannedPhoto.displayName)
+        if (!fallbackName.isNullOrBlank()) {
+            val fbKey = fallbackName.trim().lowercase()
+            val match = photoIndex[fbKey]
+            if (match != null) {
+                return Triple(match, true, true)
+            }
+        }
+
         // Extract filename variations
-        val candidateNames = extractCandidateFileNames(trimmed)
+        val candidateNames = extractCandidateFileNames(trimmed, context)
         for (candidate in candidateNames) {
             val key = candidate.lowercase()
             val match = photoIndex[key]
@@ -307,7 +322,7 @@ object PhotoPathRelinker {
         return file.exists() && file.canRead() && file.length() > 0
     }
 
-    fun extractCandidateFileNames(path: String): List<String> {
+    fun extractCandidateFileNames(path: String, context: Context? = null): List<String> {
         val results = mutableListOf<String>()
         val clean = path.trim()
             .removePrefix("[").removeSuffix("]")
@@ -317,7 +332,7 @@ object PhotoPathRelinker {
         try {
             val decoded = URLDecoder.decode(clean, "UTF-8")
             val name1 = File(decoded).name.trim()
-            if (name1.isNotEmpty()) results.add(name1)
+            if (name1.isNotEmpty() && !results.contains(name1)) results.add(name1)
         } catch (_: Exception) {}
 
         val name2 = File(clean).name.trim()
@@ -336,6 +351,32 @@ object PhotoPathRelinker {
                     if (leaf.isNotEmpty() && !results.contains(leaf)) results.add(leaf)
                 }
             } catch (_: Exception) {}
+
+            // Try querying MediaStore if context is provided and leaf is numeric ID
+            if (context != null) {
+                val numericId = results.firstOrNull { it.all { ch -> ch.isDigit() } }?.toLongOrNull()
+                if (numericId != null) {
+                    try {
+                        context.contentResolver.query(
+                            MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
+                            arrayOf(MediaStore.Images.Media.DISPLAY_NAME),
+                            "${MediaStore.Images.Media._ID} = ?",
+                            arrayOf(numericId.toString()),
+                            null
+                        )?.use { cursor ->
+                            if (cursor.moveToFirst()) {
+                                val nameIdx = cursor.getColumnIndex(MediaStore.Images.Media.DISPLAY_NAME)
+                                if (nameIdx != -1) {
+                                    val name = cursor.getString(nameIdx)
+                                    if (!name.isNullOrBlank() && !results.contains(name)) {
+                                        results.add(name)
+                                    }
+                                }
+                            }
+                        }
+                    } catch (_: Exception) {}
+                }
+            }
         }
         return results
     }

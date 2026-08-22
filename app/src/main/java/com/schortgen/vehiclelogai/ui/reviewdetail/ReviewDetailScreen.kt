@@ -28,6 +28,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.sp
 import com.schortgen.vehiclelogai.data.models.ReviewItem
+import com.schortgen.vehiclelogai.data.models.toImageModel
 import java.util.Locale
 import com.schortgen.vehiclelogai.data.repository.PreferredTripMeter
 import androidx.compose.material3.*
@@ -334,9 +335,8 @@ fun ReviewDetailScreen(
                     ) {
                         val photoPath = activeItem?.photoPath
                         if (!photoPath.isNullOrBlank()) {
-                            val data = if (photoPath.startsWith("content://") || photoPath.startsWith("file://")) Uri.parse(photoPath) else photoPath
                             val model = ImageRequest.Builder(context)
-                                .data(data)
+                                .data(photoPath.toImageModel(context))
                                 .listener(onError = { _, _ -> DiagnosticLogger.e("ImageLoad", "Failed to load photo: $photoPath") })
                                 .build()
 
@@ -403,9 +403,8 @@ fun ReviewDetailScreen(
                                     ) {
                                         val path = item.photoPath
                                         if (!path.isNullOrBlank()) {
-                                            val data = if (path.startsWith("content://") || path.startsWith("file://")) Uri.parse(path) else path
                                             AsyncImage(
-                                                model = ImageRequest.Builder(context).data(data).build(),
+                                                model = ImageRequest.Builder(context).data(path.toImageModel(context)).build(),
                                                 contentDescription = "Thumbnail",
                                                 contentScale = ContentScale.Crop,
                                                 modifier = Modifier.fillMaxSize()
@@ -1294,7 +1293,7 @@ fun ReviewDetailScreen(
                 val uriString = dialogImageUri
                 if (!uriString.isNullOrBlank()) {
                     val model = ImageRequest.Builder(context)
-                        .data(if (uriString.startsWith("content://") || uriString.startsWith("file://")) Uri.parse(uriString) else uriString)
+                        .data(uriString.toImageModel(context))
                         .listener(onError = { _, _ -> DiagnosticLogger.e("ImageLoad", "Failed to load dialog photo: $dialogImageUri") })
                         .build()
 
